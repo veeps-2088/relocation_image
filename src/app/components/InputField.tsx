@@ -20,8 +20,10 @@ export default function InputField({
 }: InputFieldProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isImageSent, setIsImageSent] = useState(false);
+  const [resetUploader, setResetUploader] = useState(false);
 
   const handleImageChange = async (file: File | null) => {
+    setResetUploader(false);
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -38,19 +40,14 @@ export default function InputField({
   const handleSubmitWithImage = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Send image if it exists and hasn't been sent
     if (selectedImage && !isImageSent) {
-      console.log('Sending image:', selectedImage.substring(0, 100) + '...'); // Log first 100 chars of image data
       onSubmit(e, selectedImage);
+      setSelectedImage(null);
       setIsImageSent(true);
-      // Don't clear the image yet if there's text to send
-      if (!input.trim()) {
-        setSelectedImage(null);
-      }
+      setResetUploader(true);
       return;
     }
 
-    // Send text message
     if (input.trim()) {
       onSubmit(e, undefined);
       setSelectedImage(null);
@@ -60,7 +57,10 @@ export default function InputField({
 
   return (
     <div className="space-y-4">
-      <ImageUpload onImageChange={handleImageChange} />
+      <ImageUpload 
+        onImageChange={handleImageChange} 
+        reset={resetUploader}
+      />
       {selectedImage && !isImageSent && (
         <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
           <span className="text-sm text-blue-600 dark:text-blue-400">

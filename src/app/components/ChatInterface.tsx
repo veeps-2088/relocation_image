@@ -34,10 +34,13 @@ export default function ChatInterface() {
     const newMessages = messages.map(message => ({
       id: message.id,
       content: message.content,
-      role: message.role,
+      role: message.role as 'user' | 'assistant',
       createdAt: Date.now(),
       imageUrl: (message as any).data?.imageUrl
-    }));
+    })).filter(message => 
+      message.role === 'user' || message.role === 'assistant'
+    );
+    
     setChatMessages(newMessages);
   }, [messages]);
 
@@ -48,10 +51,7 @@ export default function ChatInterface() {
     setAbortController(controller);
     
     try {
-      console.log('Handling image submission:', imageUrl ? 'Image present' : 'No image');
-      
       if (imageUrl) {
-        console.log('Adding image message');
         // Add image message to local state immediately
         const imageMessage: ChatMessage = {
           id: Date.now().toString(),
@@ -63,14 +63,11 @@ export default function ChatInterface() {
         setChatMessages(prev => [...prev, imageMessage]);
       }
 
-      // Submit to API
+      // Submit to API with proper typing
       await handleSubmit(e, {
-        data: {
-          imageUrl,
-        }
+        data: JSON.stringify({ imageUrl }) as any
       });
 
-      console.log('Message submitted successfully');
     } catch (error) {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');

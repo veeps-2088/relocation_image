@@ -5,12 +5,22 @@ import { Image as ImageIcon, X } from "lucide-react";
 
 interface ImageUploadProps {
   onImageChange: (file: File | null) => void;
+  reset?: boolean;
 }
 
-export default function ImageUpload({ onImageChange }: ImageUploadProps) {
+export default function ImageUpload({ onImageChange, reset }: ImageUploadProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (reset) {
+      setImagePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [reset]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
