@@ -1,12 +1,19 @@
 'use client';
 
-import { Message } from 'ai';
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Copy } from 'lucide-react';
 
+type ChatMessage = {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  imageUrl?: string;
+  createdAt: number;
+};
+
 interface MessageListProps {
-  messages: Message[];
+  messages: ChatMessage[];
 }
 
 const MessageList = memo(({ messages }: MessageListProps) => {
@@ -31,33 +38,40 @@ const MessageList = memo(({ messages }: MessageListProps) => {
             }`}
           >
             {message.imageUrl && (
-              <img
-                src={message.imageUrl}
-                alt="Uploaded"
-                className="max-w-sm rounded-lg mb-2"
-              />
+              <div className="mb-2">
+                <img
+                  src={message.imageUrl}
+                  alt="Uploaded content"
+                  className="max-w-full rounded-lg"
+                  style={{ maxHeight: '200px', objectFit: 'contain' }}
+                />
+              </div>
             )}
-            <ReactMarkdown 
-              className="prose dark:prose-invert max-w-none"
-              components={{
-                pre: ({ node, ...props }) => (
-                  <div className="overflow-auto my-2 p-2 bg-gray-800 rounded-lg">
-                    <pre {...props} />
-                  </div>
-                ),
-                code: ({ node, ...props }) => (
-                  <code className="bg-gray-800 rounded px-1" {...props} />
-                ),
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-            <button
-              onClick={() => copyToClipboard(message.content)}
-              className="absolute top-2 right-2 opacity-0 hover:opacity-100 transition-opacity"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
+            {message.content && (
+              <ReactMarkdown 
+                className="prose dark:prose-invert max-w-none"
+                components={{
+                  pre: ({ node, ...props }) => (
+                    <div className="overflow-auto my-2 p-2 bg-gray-800 rounded-lg">
+                      <pre {...props} />
+                    </div>
+                  ),
+                  code: ({ node, ...props }) => (
+                    <code className="bg-gray-800 rounded px-1" {...props} />
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            )}
+            {message.content && (
+              <button
+                onClick={() => copyToClipboard(message.content)}
+                className="absolute top-2 right-2 opacity-0 hover:opacity-100 transition-opacity"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       ))}

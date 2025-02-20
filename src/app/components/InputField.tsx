@@ -27,7 +27,7 @@ export default function InputField({
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         setSelectedImage(dataUrl);
-        setIsImageSent(false); // Reset when new image is selected
+        setIsImageSent(false);
       };
       reader.readAsDataURL(file);
     } else {
@@ -37,13 +37,22 @@ export default function InputField({
 
   const handleSubmitWithImage = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Send image if it exists and hasn't been sent
     if (selectedImage && !isImageSent) {
-      // If there's an unset image, send it first
+      console.log('Sending image:', selectedImage.substring(0, 100) + '...'); // Log first 100 chars of image data
       onSubmit(e, selectedImage);
       setIsImageSent(true);
-    } else if (input.trim() || (selectedImage && !isImageSent)) {
-      // Send text message or both text + image
-      onSubmit(e, !isImageSent ? selectedImage : undefined);
+      // Don't clear the image yet if there's text to send
+      if (!input.trim()) {
+        setSelectedImage(null);
+      }
+      return;
+    }
+
+    // Send text message
+    if (input.trim()) {
+      onSubmit(e, undefined);
       setSelectedImage(null);
       setIsImageSent(false);
     }
@@ -58,6 +67,7 @@ export default function InputField({
             Image ready to send
           </span>
           <button
+            type="button"
             onClick={(e) => handleSubmitWithImage(e)}
             className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
             disabled={isLoading}

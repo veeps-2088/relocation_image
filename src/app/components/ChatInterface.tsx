@@ -2,14 +2,22 @@
 
 import { useChat } from 'ai/react';
 import { useState, useEffect } from 'react';
-import { useChatStore } from '@/lib/store/chatStore';
 import MessageList from './MessageList';
 import InputField from './InputField';
 import ErrorDisplay from './ErrorDisplay';
 import LoadingIndicator from './LoadingIndicator';
 
+type ChatMessage = {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  imageUrl?: string;
+  createdAt: number;
+};
+
 export default function ChatInterface() {
-  const { error, addMessage, setError } = useChatStore();
+  const [error, setError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop } = useChat({
@@ -21,17 +29,17 @@ export default function ChatInterface() {
     },
   });
 
+  // Sync AI SDK messages with our local state
   useEffect(() => {
-    messages.forEach((message) => {
-      addMessage({
-        id: message.id,
-        content: message.content,
-        role: message.role,
-        createdAt: Date.now(),
-        imageUrl: message.role === 'user' ? (message as any).imageUrl : undefined,
-      });
-    });
-  }, [messages, addMessage]);
+    const newMessages = messages.map(message => ({
+      id: message.id,
+      content: message.content,
+      role: message.role,
+      createdAt: Date.now(),
+      imageUrl: (message as any).data?.imageUrl
+    }));
+    setChatMessages(newMessages);
+  }, [messages]);
 
   const handleSubmitWithImage = async (e: React.FormEvent, imageUrl?: string) => {
     e.preventDefault();
@@ -40,12 +48,29 @@ export default function ChatInterface() {
     setAbortController(controller);
     
     try {
-      await handleSubmit(e, {
-        signal: controller.signal,
-        data: {
+      console.log('Handling image submission:', imageUrl ? 'Image present' : 'No image');
+      
+      if (imageUrl) {
+        console.log('Adding image message');
+        // Add image message to local state immediately
+        const imageMessage: ChatMessage = {
+          id: Date.now().toString(),
+          content: '',
+          role: 'user',
+          createdAt: Date.now(),
           imageUrl: imageUrl,
-        },
+        };
+        setChatMessages(prev => [...prev, imageMessage]);
+      }
+
+      // Submit to API
+      await handleSubmit(e, {
+        data: {
+          imageUrl,
+        }
       });
+
+      console.log('Message submitted successfully');
     } catch (error) {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');
@@ -67,7 +92,7 @@ export default function ChatInterface() {
         </div>
       )}
       <div className="flex-1 overflow-y-auto mb-4">
-        <MessageList messages={messages} />
+        <MessageList messages={chatMessages} />
       </div>
       <div className="relative">
         {isLoading && <LoadingIndicator />}
