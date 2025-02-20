@@ -1,11 +1,10 @@
-# Ansh & Riley Full-Stack Template
+# Relocation Image Feature
 
-This is a full-stack template project for Software Composers to create  applications with AI.
+The system provides a multi-agentic AI-powered chat interface to assist users in their relocation process. The first feature of this prototype is object detection from user-uploaded photos to generate an estimated cost for each detected item. The system will utilize v0, cursor, huggingface, and web3 technologies to create a modern, efficient, and secure platform. For prototyping, all data is stored in a JSON object—no external databases are required.
 
 ## Getting started
-To create a new project, you go to `/paths`, choose from our list of Paths, and then use Cursor's Composer feature to quickly scaffold your project!
+Used [Ansh & Riley's  Full-Stack Template](https://github.com/ansh/template-2) to create a chat interface. Followed their template in `/paths/chat.md` to scaffold the project. Then I updated the functionality to use `imageUpload.tsx` to allow the user to submit a photo from their desktop into the chat interface. 
 
-You can also edit the Path's prompt template to be whatever you like!
 
 ## Technologies used
 This doesn't really matter, but is useful for the AI to understand more about this project. We are using the following technologies
