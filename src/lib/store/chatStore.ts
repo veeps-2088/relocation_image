@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { ChatState, Message } from '../types/chat';
 
 interface ChatStore extends ChatState {
@@ -9,20 +8,13 @@ interface ChatStore extends ChatState {
   clearHistory: () => void;
 }
 
-export const useChatStore = create<ChatStore>()(
-  persist(
-    (set) => ({
-      messages: [],
-      isLoading: false,
-      error: null,
-      addMessage: (message) =>
-        set((state) => ({ messages: [...state.messages, message] })),
-      setLoading: (loading) => set({ isLoading: loading }),
-      setError: (error) => set({ error }),
-      clearHistory: () => set({ messages: [] }),
-    }),
-    {
-      name: 'chat-storage',
-    }
-  )
-); 
+export const useChatStore = create<ChatStore>((set) => ({
+  messages: [],
+  isLoading: false,
+  error: null,
+  addMessage: (message) =>
+    set((state) => ({ messages: [...state.messages, message] })),
+  setLoading: (loading) => set({ isLoading: loading }),
+  setError: (error) => set({ error }),
+  clearHistory: () => set({ messages: [] }),
+})); 

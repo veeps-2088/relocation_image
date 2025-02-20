@@ -30,6 +30,13 @@ const MessageList = memo(({ messages }: MessageListProps) => {
                 : 'bg-gray-100 dark:bg-gray-800'
             }`}
           >
+            {message.imageUrl && (
+              <img
+                src={message.imageUrl}
+                alt="Uploaded"
+                className="max-w-sm rounded-lg mb-2"
+              />
+            )}
             <ReactMarkdown 
               className="prose dark:prose-invert max-w-none"
               components={{
