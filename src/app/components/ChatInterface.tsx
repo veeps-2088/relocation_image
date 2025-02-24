@@ -67,7 +67,10 @@ export default function ChatInterface() {
 
         // Format the detection results for display
         const detectedObjects = detectionResults.success 
-          ? detectionResults.results.map(r => `${r.label} (${r.score})`)
+          ? detectionResults.results
+              .filter(r => parseFloat(r.score) > 90)
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map(r => `${r.label} (${r.score})`)
           : [];
         
         const detectionText = detectedObjects.length > 0 
