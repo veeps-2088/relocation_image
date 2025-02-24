@@ -12,9 +12,12 @@ export const runtime = 'edge';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('API received request:', body);
+    console.log('API route received request');
     
     const { messages, data } = body;
+    const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+    console.log('Parsed data:', parsedData);
+    const { imageUrl, description } = parsedData;
 
     // Check API key first
     if (!process.env.OPENAI_API_KEY) {
@@ -26,19 +29,20 @@ export async function POST(req: Request) {
 
     // If there's an image, add it to the system message
     let systemMessage = "You are a helpful AI assistant.";
-    if (data?.imageUrl) {
-      systemMessage += " The user has shared an image with you.";
+    if (imageUrl) {
+      systemMessage += ` The user has shared an image with you. ${description}`;
     }
 
     // Prepare messages for OpenAI
     const apiMessages = [
       { role: 'system', content: systemMessage },
-      ...messages.map(msg => ({
+      ...messages.map((msg: { role: string; content: string }) => ({
         role: msg.role,
         content: msg.content || ''
       }))
     ];
 
+    console.log('Sending to OpenAI with system message:', systemMessage);
     const response = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: apiMessages,
@@ -46,6 +50,7 @@ export async function POST(req: Request) {
       stream: true,
     });
 
+    console.log('OpenAI response received, streaming back to client');
     const stream = OpenAIStream(response);
     return new StreamingTextResponse(stream);
     
