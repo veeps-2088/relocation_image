@@ -52,22 +52,49 @@ export default function ChatInterface() {
     
     try {
       if (imageUrl) {
-        // Add image message to local state immediately
+        console.log('Image received, sending to Hugging Face for detection...');
+
+        const response = await fetch('/api/object-detection', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ imageUrl }),
+        });
+
+        const detectionResults = await response.json();
+        console.log('Detection results:', detectionResults);
+
+        // Format the detection results for display
+        const detectedObjects = detectionResults.success 
+          ? detectionResults.results
+              .filter(r => parseFloat(r.score) > 90)
+              .sort((a, b) => a.label.localeCompare(b.label))
+              .map(r => `${r.label} (${r.score})`)
+          : [];
+        
+        const detectionText = detectedObjects.length > 0 
+          ? `Objects detected: ${detectedObjects.join(', ')}`
+          : 'No objects detected';
+
+        // Create message with both image and detection results
         const imageMessage: ChatMessage = {
           id: Date.now().toString(),
-          content: '',
+          content: detectionText,
           role: 'user',
           createdAt: Date.now(),
           imageUrl: imageUrl,
         };
         setChatMessages(prev => [...prev, imageMessage]);
+
+        // Send to OpenAI with detection results
+        await handleSubmit(e, {
+          data: JSON.stringify({ 
+            imageUrl,
+            detectedObjects 
+          }) as any
+        });
       }
-
-      // Submit to API with proper typing
-      await handleSubmit(e, {
-        data: JSON.stringify({ imageUrl }) as any
-      });
-
     } catch (error) {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');
