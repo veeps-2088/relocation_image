@@ -15,6 +15,26 @@ type ChatMessage = {
   createdAt: number;
 };
 
+const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
+  person: 0, // No price for people
+  car: 25000,
+  truck: 45000,
+  bicycle: 500,
+  motorcycle: 8000,
+  bus: 100000,
+  chair: 150,
+  sofa: 1000,
+  couch: 1000,
+  potted_plant: 100,
+  table: 500,
+  bed: 800,
+  laptop: 1200,
+  computer: 1500,
+  phone: 800,
+  tv: 700,
+  // Add more objects as needed
+};
+
 export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -65,12 +85,16 @@ export default function ChatInterface() {
         const detectionResults = await response.json();
         console.log('Detection results:', detectionResults);
 
-        // Format the detection results for display
+        // Format the detection results with prices
         const detectedObjects = detectionResults.success 
           ? detectionResults.results
-              .filter(r => parseFloat(r.score) > 90)
-              .sort((a, b) => a.label.localeCompare(b.label))
-              .map(r => `${r.label} (${r.score})`)
+              .filter((r: { score: string }) => parseFloat(r.score) > 90)
+              .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label))
+              .map((r: { label: string, score: string }) => {
+                const price = OBJECT_PRICE_MAPPING[r.label.toLowerCase()] || 'N/A';
+                const accuracy = Math.round(parseFloat(r.score));
+                return `${r.label} (${accuracy}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`;
+              })
           : [];
         
         const detectionText = detectedObjects.length > 0 
