@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 'use client';
 
 import { estimateImagePrice, formatPrice } from '@/lib/utils/priceEstimator';
@@ -27,3 +28,6 @@ export default function ImagePriceEstimator({ classifications }: Props) {
     </div>
   );
 } 
+=======
+ 
+>>>>>>> d2f2ab7 (update cost estimator)

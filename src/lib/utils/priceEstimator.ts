@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 type ImageClassification = {
   label: string;
   confidence: number;
@@ -61,3 +62,6 @@ export function formatPrice(price: number): string {
     currency: 'USD',
   }).format(price);
 } 
+=======
+ 
+>>>>>>> d2f2ab7 (update cost estimator)
