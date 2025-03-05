@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from 'ai/react';
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import MessageList from './MessageList';
 import InputField from './InputField';
 import ErrorDisplay from './ErrorDisplay';
@@ -37,63 +37,69 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
 
 export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [pendingImageMessage, setPendingImageMessage] = useState<ChatMessage | null>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, stop } = useChat({
+  const {
+    messages: aiMessages,
+    input,
+    handleInputChange,
+    setMessages,
+    handleSubmit,
+    isLoading,
+    stop
+  } = useChat({
     api: '/api/openai/chat',
     initialMessages: [
       {
         id: 'welcome-message',
         role: 'assistant',
-        content: "Hi there, I'm your relocation buddy! 👋 To help estimate your moving costs, could you please upload an image of your household items? This will help me identify items and provide a rough cost estimate.",
+        content: "Hi there, I'm your relocation buddy! 👋 To help estimate your moving costs, could you please upload an image of your household items?",
         createdAt: Date.now()
       }
     ],
-    onFinish: () => setAbortController(null),
+    onFinish: () => {
+      setAbortController(null);
+      setPendingImageMessage(null);
+    },
     onError: (error) => {
       console.error('Chat error:', error);
       setError(error.message || 'An error occurred during the chat');
     },
   });
 
-  // Sync AI SDK messages with our local state
-  useEffect(() => {
-    const newMessages = messages.map(message => ({
-      id: message.id,
-      content: message.content,
-      role: message.role as 'user' | 'assistant',
-      createdAt: Date.now(),
-      imageUrl: (message as any).data?.imageUrl
-    })).filter(message => 
-      message.role === 'user' || message.role === 'assistant'
-    );
-    
-    setChatMessages(newMessages);
-  }, [messages]);
+  // Combine AI messages with pending image message
+  const displayMessages = [...aiMessages];
+  if (pendingImageMessage) {
+    displayMessages.push(pendingImageMessage);
+  }
 
   const handleSubmitWithImage = async (e: React.FormEvent, imageUrl?: string) => {
     e.preventDefault();
     setError(null);
-    const controller = new AbortController();
-    setAbortController(controller);
     
     try {
       if (imageUrl) {
-        console.log('Image received, sending to Hugging Face for detection...');
+        // Create and display the image message immediately
+        const imageMessage: ChatMessage = {
+          id: Date.now().toString(),
+          content: 'Analyzing image...',
+          role: 'user',
+          imageUrl: imageUrl,
+          createdAt: Date.now()
+        };
+        setPendingImageMessage(imageMessage);
 
+        // Analyze the image
         const response = await fetch('/api/object-detection', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageUrl }),
         });
 
         const detectionResults = await response.json();
-        console.log('Detection results:', detectionResults);
 
-        // Format the detection results with prices
         const detectedObjects = detectionResults.success 
           ? detectionResults.results
               .filter((r: { score: string }) => parseFloat(r.score) > 90)
@@ -104,44 +110,41 @@ export default function ChatInterface() {
                 return `${r.label} (${accuracy}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`;
               })
           : [];
-        
-        const detectionText = detectedObjects.length > 0 
-          ? `Objects detected: ${detectedObjects.join(', ')}`
-          : 'No objects detected';
 
-        // Create message with both image and detection results
-        const imageMessage: ChatMessage = {
-          id: Date.now().toString(),
-          content: detectionText,
-          role: 'user',
-          createdAt: Date.now(),
-          imageUrl: imageUrl,
+        // Update the image message with detection results
+        const updatedImageMessage: ChatMessage = {
+          ...imageMessage,
+          content: detectedObjects.length > 0 
+            ? `Objects detected: ${detectedObjects.join(', ')}`
+            : 'No objects detected'
         };
-        setChatMessages(prev => [...prev, imageMessage]);
+        setPendingImageMessage(updatedImageMessage);
 
         // Send to OpenAI with detection results
         await handleSubmit(e, {
-          data: JSON.stringify({ 
+          data: {
             imageUrl,
-            detectedObjects 
-          })
+            detectedObjects
+          }
         });
+
       } else {
-        // For regular text messages, just call handleSubmit without any data
+        // Handle regular text message
         await handleSubmit(e);
       }
     } catch (error) {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');
+      setPendingImageMessage(null);
     }
   };
 
-  const handleStopGeneration = () => {
-    if (abortController) {
-      abortController.abort();
-      stop();
-    }
-  };
+  useEffect(() => {
+    const scrollTimeout = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(scrollTimeout);
+  }, [displayMessages.length]);
 
   return (
     <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
@@ -151,7 +154,8 @@ export default function ChatInterface() {
         </div>
       )}
       <div className="flex-1 overflow-y-auto mb-4">
-        <MessageList messages={chatMessages} />
+        <MessageList messages={displayMessages} />
+        <div ref={messagesEndRef} />
       </div>
       <div className="relative">
         {isLoading && <LoadingIndicator />}
@@ -160,7 +164,7 @@ export default function ChatInterface() {
           handleInputChange={handleInputChange}
           onSubmit={handleSubmitWithImage}
           isLoading={isLoading}
-          onStopGeneration={handleStopGeneration}
+          onStopGeneration={stop}
         />
       </div>
     </div>
