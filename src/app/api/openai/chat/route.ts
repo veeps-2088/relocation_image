@@ -15,9 +15,14 @@ export async function POST(req: Request) {
     console.log('API route received request');
     
     const { messages, data } = body;
-    const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-    console.log('Parsed data:', parsedData);
-    const { imageUrl, description } = parsedData;
+    
+    // Only try to parse data if it exists
+    let imageUrl, description;
+    if (data) {
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      imageUrl = parsedData.imageUrl;
+      description = parsedData.detectedObjects;
+    }
 
     // Check API key first
     if (!process.env.OPENAI_API_KEY) {
@@ -28,9 +33,9 @@ export async function POST(req: Request) {
     }
 
     // If there's an image, add it to the system message
-    let systemMessage = "You are a helpful AI assistant.";
+    let systemMessage = "You are a helpful AI assistant that helps people estimate moving costs.";
     if (imageUrl) {
-      systemMessage += ` The user has shared an image with you. ${description}`;
+      systemMessage += ` The user has shared an image with you. The following objects were detected: ${description}`;
     }
 
     // Prepare messages for OpenAI

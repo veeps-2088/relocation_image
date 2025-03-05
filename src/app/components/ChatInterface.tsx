@@ -42,6 +42,14 @@ export default function ChatInterface() {
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop } = useChat({
     api: '/api/openai/chat',
+    initialMessages: [
+      {
+        id: 'welcome-message',
+        role: 'assistant',
+        content: "Hi there, I'm your relocation buddy! 👋 To help estimate your moving costs, could you please upload an image of your household items? This will help me identify items and provide a rough cost estimate.",
+        createdAt: Date.now()
+      }
+    ],
     onFinish: () => setAbortController(null),
     onError: (error) => {
       console.error('Chat error:', error);
@@ -116,8 +124,11 @@ export default function ChatInterface() {
           data: JSON.stringify({ 
             imageUrl,
             detectedObjects 
-          }) as any
+          })
         });
+      } else {
+        // For regular text messages, just call handleSubmit without any data
+        await handleSubmit(e);
       }
     } catch (error) {
       console.error('Submit error:', error);
