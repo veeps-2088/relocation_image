@@ -22,10 +22,11 @@ export async function POST(req: Request) {
 
     console.log('Raw detection results:', detectionResults);
 
-    // Extract labels and scores
+    // Extract labels, scores, and boxes
     const labels = detectionResults.map(result => ({
       label: result.label,
-      score: (result.score * 100).toFixed(2) + '%'
+      score: (result.score * 100).toFixed(2),
+      box: result.box
     }));
     
     console.log('Extracted labels:', labels);

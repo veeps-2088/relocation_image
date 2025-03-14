@@ -6,13 +6,24 @@ import MessageList from './MessageList';
 import InputField from './InputField';
 import ErrorDisplay from './ErrorDisplay';
 import LoadingIndicator from './LoadingIndicator';
+import ImageCarousel from './ImageCarousel';
 
 type ChatMessage = {
   id: string;
   content: string;
   role: 'user' | 'assistant';
   imageUrl?: string;
-  createdAt: number;
+  lowerConfidenceObjects?: Array<{
+    label: string;
+    score: string;
+    box: {
+      xmin: number;
+      ymin: number;
+      xmax: number;
+      ymax: number;
+    };
+  }>;
+  createdAt: Date;
 };
 
 const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
@@ -55,7 +66,7 @@ export default function ChatInterface() {
         id: 'welcome-message',
         role: 'assistant',
         content: "Hi there, I'm your relocation buddy! 👋 To help estimate your moving costs, could you please upload an image of your household items?",
-        createdAt: new Date()
+        createdAt: Date.now()
       }
     ],
     onFinish: () => {
@@ -96,23 +107,35 @@ export default function ChatInterface() {
 
         const detectionResults = await response.json();
 
-        const detectedObjects = detectionResults.success 
-          ? detectionResults.results
-              .filter((r: { score: string }) => parseFloat(r.score) > 90)
-              .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label))
-              .map((r: { label: string, score: string }) => {
-                const price = OBJECT_PRICE_MAPPING[r.label.toLowerCase()] || 'N/A';
-                const accuracy = Math.round(parseFloat(r.score));
-                return `${r.label} (${accuracy}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`;
-              })
-          : [];
+        // Separate objects by confidence level
+        const highConfidenceObjects = [];
+        const lowerConfidenceObjects = [];
+
+        if (detectionResults.success) {
+          for (const result of detectionResults.results) {
+            const score = parseFloat(result.score);
+            if (score > 90) {
+              const price = OBJECT_PRICE_MAPPING[result.label.toLowerCase()] || 'N/A';
+              highConfidenceObjects.push(
+                `${result.label} (${Math.round(score)}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`
+              );
+            } else if (score >= 50 && score <= 89) {
+              lowerConfidenceObjects.push({
+                label: result.label,
+                score: result.score,
+                box: result.box
+              });
+            }
+          }
+        }
 
         // Update the image message with detection results
         const updatedImageMessage = {
           ...imageMessage,
-          content: detectedObjects.length > 0 
-            ? `Objects detected: ${detectedObjects.join(', ')}`
-            : 'No objects detected'
+          content: highConfidenceObjects.length > 0 
+            ? `Objects detected: ${highConfidenceObjects.join(', ')}`
+            : 'No high-confidence objects detected',
+          lowerConfidenceObjects: lowerConfidenceObjects
         };
         
         // Update chat history with the results
@@ -122,7 +145,7 @@ export default function ChatInterface() {
         await handleSubmit(e, {
           data: {
             imageUrl,
-            detectedObjects
+            detectedObjects: highConfidenceObjects
           }
         });
 
