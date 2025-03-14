@@ -39,7 +39,6 @@ export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [pendingImageMessage, setPendingImageMessage] = useState<ChatMessage | null>(null);
 
   const {
     messages: aiMessages,
@@ -56,12 +55,11 @@ export default function ChatInterface() {
         id: 'welcome-message',
         role: 'assistant',
         content: "Hi there, I'm your relocation buddy! 👋 To help estimate your moving costs, could you please upload an image of your household items?",
-        createdAt: Date.now()
+        createdAt: new Date()
       }
     ],
     onFinish: () => {
       setAbortController(null);
-      setPendingImageMessage(null);
     },
     onError: (error) => {
       console.error('Chat error:', error);
@@ -69,11 +67,7 @@ export default function ChatInterface() {
     },
   });
 
-  // Combine AI messages with pending image message
-  const displayMessages = [...aiMessages];
-  if (pendingImageMessage) {
-    displayMessages.push(pendingImageMessage);
-  }
+  const displayMessages = aiMessages;
 
   const handleSubmitWithImage = async (e: React.FormEvent, imageUrl?: string) => {
     e.preventDefault();
@@ -81,15 +75,17 @@ export default function ChatInterface() {
     
     try {
       if (imageUrl) {
-        // Create and display the image message immediately
-        const imageMessage: ChatMessage = {
+        // Create the image message
+        const imageMessage = {
           id: Date.now().toString(),
           content: 'Analyzing image...',
-          role: 'user',
+          role: 'user' as const,
           imageUrl: imageUrl,
-          createdAt: Date.now()
+          createdAt: new Date()
         };
-        setPendingImageMessage(imageMessage);
+        
+        // Add image message to chat history
+        setMessages([...aiMessages, imageMessage]);
 
         // Analyze the image
         const response = await fetch('/api/object-detection', {
@@ -112,13 +108,15 @@ export default function ChatInterface() {
           : [];
 
         // Update the image message with detection results
-        const updatedImageMessage: ChatMessage = {
+        const updatedImageMessage = {
           ...imageMessage,
           content: detectedObjects.length > 0 
             ? `Objects detected: ${detectedObjects.join(', ')}`
             : 'No objects detected'
         };
-        setPendingImageMessage(updatedImageMessage);
+        
+        // Update chat history with the results
+        setMessages([...aiMessages.slice(0, -1), updatedImageMessage]);
 
         // Send to OpenAI with detection results
         await handleSubmit(e, {
@@ -135,7 +133,6 @@ export default function ChatInterface() {
     } catch (error) {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');
-      setPendingImageMessage(null);
     }
   };
 
