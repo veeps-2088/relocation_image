@@ -141,6 +141,14 @@ Total estimated moving cost for the identified items: $${totalCost.toLocaleStrin
 Please note that this estimate is based on the objects detected in the images provided. Additional costs may apply depending on the size of the move, distance, additional items, and any specific moving services required.`;
 };
 
+// Add to existing interfaces
+interface ObjectConfirmation {
+  label: string;
+  score: string;
+  confirmed: boolean;
+  imageUrl: string;
+}
+
 export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -270,6 +278,31 @@ export default function ChatInterface() {
       console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'An error occurred while sending the message');
     }
+  };
+
+  // In the ChatInterface component, add a handler for confirmations
+  const handleObjectConfirmations = (confirmations: ObjectConfirmation[]) => {
+    // Filter out objects that were marked as incorrect
+    const confirmedObjects = confirmations.filter(obj => obj.confirmed);
+    
+    // Recalculate the cost summary with only confirmed objects
+    const confirmedHighConfidenceObjects = confirmedObjects.map(obj => 
+      `${obj.label} (${parseFloat(obj.score).toFixed(1)}% confident${
+        OBJECT_PRICE_MAPPING[obj.label.toLowerCase()] 
+          ? `, Est. $${OBJECT_PRICE_MAPPING[obj.label.toLowerCase()]}` 
+          : ''
+      })`
+    );
+
+    const { items, totalCost } = aggregateDetectionResults(confirmedHighConfidenceObjects);
+    
+    // Update the message with new summary
+    const updatedMessage = {
+      ...aiMessages[aiMessages.length - 1],
+      content: formatSummaryMessage(items, totalCost)
+    };
+
+    setMessages([...aiMessages.slice(0, -1), updatedMessage]);
   };
 
   useEffect(() => {

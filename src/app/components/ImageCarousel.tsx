@@ -11,6 +11,7 @@ interface DetectedObject {
     xmax: number;
     ymax: number;
   };
+  confirmed?: boolean; // Add confirmation status
 }
 
 interface ImageCarouselProps {
@@ -29,12 +30,19 @@ interface ImageCarouselProps {
       }>;
     };
   }>;
+  onObjectConfirmation?: (confirmations: Array<{
+    label: string;
+    score: string;
+    confirmed: boolean;
+    imageUrl: string;
+  }>) => void;
 }
 
-export default function ImageCarousel({ detectionResults }: ImageCarouselProps) {
+export default function ImageCarousel({ detectionResults, onObjectConfirmation }: ImageCarouselProps) {
   const [currentObjectIndex, setCurrentObjectIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmedObjects, setConfirmedObjects] = useState<Map<number, boolean>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const currentImageRef = useRef<HTMLImageElement | null>(null);
   const mounted = useRef(true);
@@ -60,6 +68,32 @@ export default function ImageCarousel({ detectionResults }: ImageCarouselProps) 
       </div>
     );
   }
+
+  // Handle object confirmation
+  const handleConfirmation = (confirmed: boolean) => {
+    setConfirmedObjects(prev => {
+      const newConfirmations = new Map(prev);
+      newConfirmations.set(currentObjectIndex, confirmed);
+      
+      // If all objects have been confirmed, notify parent component
+      if (newConfirmations.size === allObjects.length && onObjectConfirmation) {
+        const confirmationResults = allObjects.map((obj, index) => ({
+          label: obj.label,
+          score: obj.score,
+          confirmed: newConfirmations.get(index) || false,
+          imageUrl: obj.imageUrl
+        }));
+        onObjectConfirmation(confirmationResults);
+      }
+      
+      return newConfirmations;
+    });
+
+    // Automatically move to next object after confirmation
+    if (currentObjectIndex < allObjects.length - 1) {
+      setCurrentObjectIndex(prev => prev + 1);
+    }
+  };
 
   const drawImage = () => {
     if (!currentImageRef.current || !canvasRef.current) return;
@@ -189,19 +223,8 @@ export default function ImageCarousel({ detectionResults }: ImageCarouselProps) 
     };
   }, [currentObjectIndex]); // Remove allObjects from dependencies
 
-  const nextSlide = () => {
-    setCurrentObjectIndex((prevIndex) => 
-      prevIndex === allObjects.length - 1 ? 0 : prevIndex + 1
-    );
-  };
-
-  const prevSlide = () => {
-    setCurrentObjectIndex((prevIndex) => 
-      prevIndex === 0 ? allObjects.length - 1 : prevIndex - 1
-    );
-  };
-
   const currentObject = allObjects[currentObjectIndex];
+  const isConfirmed = confirmedObjects.has(currentObjectIndex);
 
   return (
     <div className="relative w-full max-w-sm mx-auto mt-2">
@@ -233,7 +256,7 @@ export default function ImageCarousel({ detectionResults }: ImageCarouselProps) 
         {/* Navigation buttons */}
         <div className="absolute inset-0 flex items-center justify-between p-2 z-20">
           <button
-            onClick={prevSlide}
+            onClick={() => setCurrentObjectIndex(prev => prev === 0 ? allObjects.length - 1 : prev - 1)}
             className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
             aria-label="Previous image"
             disabled={loading}
@@ -241,7 +264,7 @@ export default function ImageCarousel({ detectionResults }: ImageCarouselProps) 
             ←
           </button>
           <button
-            onClick={nextSlide}
+            onClick={() => setCurrentObjectIndex(prev => prev === allObjects.length - 1 ? 0 : prev + 1)}
             className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
             aria-label="Next image"
             disabled={loading}
@@ -250,16 +273,51 @@ export default function ImageCarousel({ detectionResults }: ImageCarouselProps) 
           </button>
         </div>
 
-        {/* Caption */}
+        {/* Caption and confirmation buttons */}
         <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white p-2 text-center z-20">
-          <p className="text-sm">
+          <p className="text-sm mb-2">
             {currentObject.label} ({parseFloat(currentObject.score).toFixed(1)}% confident)
           </p>
+          
+          {!isConfirmed && !loading && (
+            <div className="flex justify-center space-x-2 mb-2">
+              <button
+                onClick={() => handleConfirmation(true)}
+                className="px-4 py-1 bg-green-500 hover:bg-green-600 rounded-full text-sm font-medium transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => handleConfirmation(false)}
+                className="px-4 py-1 bg-red-500 hover:bg-red-600 rounded-full text-sm font-medium transition-colors"
+              >
+                No
+              </button>
+            </div>
+          )}
+
+          {isConfirmed && (
+            <p className="text-sm text-green-400">
+              ✓ Confirmed: {confirmedObjects.get(currentObjectIndex) ? 'Yes' : 'No'}
+            </p>
+          )}
+
           <p className="text-xs text-gray-300">
             {currentObjectIndex + 1} of {allObjects.length}
           </p>
         </div>
       </div>
+
+      {/* Progress bar */}
+      <div className="mt-2 bg-gray-200 rounded-full overflow-hidden">
+        <div 
+          className="bg-blue-600 h-2 transition-all duration-300"
+          style={{ width: `${(confirmedObjects.size / allObjects.length) * 100}%` }}
+        />
+      </div>
+      <p className="text-center text-sm text-gray-500 mt-1">
+        {confirmedObjects.size} of {allObjects.length} objects reviewed
+      </p>
     </div>
   );
 } 
