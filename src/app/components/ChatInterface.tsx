@@ -49,6 +49,7 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   computer: 1500,
   phone: 800,
   tv: 700,
+  book: 15, // Add average price for books
   // Add more objects as needed
 };
 
@@ -124,7 +125,7 @@ const aggregateDetectionResults = (highConfidenceObjects: string[]): {
   return { items, totalCost };
 };
 
-// Add a function to format the summary message
+// Update the formatSummaryMessage function
 const formatSummaryMessage = (items: AggregatedItem[], totalCost: number): string => {
   const itemLines = items.map((item, index) => {
     const itemText = `${index + 1}. ${item.name.charAt(0).toUpperCase() + item.name.slice(1)} x ${item.count} ` +
@@ -132,13 +133,13 @@ const formatSummaryMessage = (items: AggregatedItem[], totalCost: number): strin
     return itemText;
   });
 
-  return `Based on the objects detected in the images and their estimated values, here is a breakdown of potential moving costs:
+  return `Sure! Based on the updated list, here is the revised breakdown of potential moving costs:
 
 ${itemLines.join('\n')}
 
 Total estimated moving cost for the identified items: $${totalCost.toLocaleString()}
 
-Please note that this estimate is based on the objects detected in the images provided. Additional costs may apply depending on the size of the move, distance, additional items, and any specific moving services required.`;
+If you have any more items to add or any changes, feel free to let me know!`;
 };
 
 // Add to existing interfaces
@@ -183,9 +184,38 @@ export default function ChatInterface() {
 
   const displayMessages = aiMessages;
 
+  const handleUpdateRequest = (message: string) => {
+    const currentMessage = aiMessages[aiMessages.length - 1];
+    
+    if (message.toLowerCase().includes('update list') || 
+        message.toLowerCase().includes('show summary')) {
+      
+      // Get the confirmed objects from the current message
+      const confirmedObjects = currentMessage.confirmedObjects || [];
+      
+      // Trigger the object confirmation handler with the stored confirmations
+      handleObjectConfirmations(confirmedObjects);
+      
+      // Add a system message confirming the update
+      const confirmationMessage = {
+        id: Date.now().toString(),
+        role: 'assistant' as const,
+        content: 'I\'ve updated the moving cost estimate with your confirmed items.',
+        createdAt: new Date()
+      };
+      
+      setMessages([...aiMessages, confirmationMessage]);
+    }
+  };
+
   const handleSubmitWithImage = async (e: React.FormEvent, imageUrls?: string[]) => {
     e.preventDefault();
     setError(null);
+    
+    // If no images, check if it's an update request
+    if (!imageUrls) {
+      handleUpdateRequest(input);
+    }
     
     try {
       if (imageUrls && imageUrls.length > 0) {
@@ -280,29 +310,67 @@ export default function ChatInterface() {
     }
   };
 
-  // In the ChatInterface component, add a handler for confirmations
+  // Update the handleObjectConfirmations function
   const handleObjectConfirmations = (confirmations: ObjectConfirmation[]) => {
-    // Filter out objects that were marked as incorrect
-    const confirmedObjects = confirmations.filter(obj => obj.confirmed);
+    // Debug log the incoming confirmations
+    console.log('Received confirmations:', confirmations);
     
-    // Recalculate the cost summary with only confirmed objects
-    const confirmedHighConfidenceObjects = confirmedObjects.map(obj => 
-      `${obj.label} (${parseFloat(obj.score).toFixed(1)}% confident${
-        OBJECT_PRICE_MAPPING[obj.label.toLowerCase()] 
-          ? `, Est. $${OBJECT_PRICE_MAPPING[obj.label.toLowerCase()]}` 
-          : ''
-      })`
-    );
+    // Get the current message
+    const currentMessage = aiMessages[aiMessages.length - 1];
+    
+    // Get existing confirmed objects and add new ones
+    const existingConfirmations = currentMessage.confirmedObjects || [];
+    const allConfirmations = [...existingConfirmations, ...confirmations];
+    console.log('All confirmations after merge:', allConfirmations);
 
-    const { items, totalCost } = aggregateDetectionResults(confirmedHighConfidenceObjects);
+    // Get all high confidence objects from the current detection results
+    const highConfidenceObjects = currentMessage.detectionResults?.flatMap(
+      result => result.objects.highConfidence
+    ) || [];
+
+    // Create array for all objects to be included in final calculation
+    const allObjects: string[] = [...highConfidenceObjects];
+
+    // Add all confirmed objects
+    allConfirmations.forEach(obj => {
+      const label = obj.label;
+      const score = parseFloat(obj.score);
+      const price = OBJECT_PRICE_MAPPING[label.toLowerCase()];
+      
+      // Debug log each object being added
+      console.log('Adding confirmed object:', {
+        label,
+        score,
+        price,
+        formatted: `${label} (${Math.round(score)}% confident${price ? `, Est. $${price}` : ''})`
+      });
+
+      // Add the confirmed object in the same format as high confidence objects
+      allObjects.push(
+        `${label} (${Math.round(score)}% confident${price ? `, Est. $${price}` : ''})`
+      );
+    });
+
+    // Calculate final summary with all objects
+    const { items, totalCost } = aggregateDetectionResults(allObjects);
     
-    // Update the message with new summary
+    // Debug log final results
+    console.log('Final aggregated items:', items);
+    console.log('Total objects in list:', allObjects.length);
+
+    // Update the message with new summary and store ALL confirmations
     const updatedMessage = {
-      ...aiMessages[aiMessages.length - 1],
-      content: formatSummaryMessage(items, totalCost)
+      ...currentMessage,
+      content: formatSummaryMessage(items, totalCost),
+      detectionResults: currentMessage.detectionResults,
+      confirmedObjects: allConfirmations  // Store all confirmations, not just the new ones
     };
 
-    setMessages([...aiMessages.slice(0, -1), updatedMessage]);
+    // Update messages
+    setMessages([
+      ...aiMessages.slice(0, -1), 
+      updatedMessage
+    ]);
   };
 
   useEffect(() => {
