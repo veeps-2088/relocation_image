@@ -6,9 +6,33 @@ import { Copy } from 'lucide-react';
 import { ChatMessage } from '@/lib/types';
 import Image from 'next/image';
 import ImageCarousel from './ImageCarousel';
+import MessageContent from './MessageContent';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  imageUrls?: string[];
+  detectionResults?: Array<{
+    imageUrl: string;
+    objects: {
+      highConfidence: string[];
+      lowerConfidence: Array<{
+        label: string;
+        score: string;
+        box: {
+          xmin: number;
+          ymin: number;
+          xmax: number;
+          ymax: number;
+        };
+      }>;
+    };
+  }>;
+}
 
 interface MessageListProps {
-  messages: ChatMessage[];
+  messages: Message[];
 }
 
 const MessageList = memo(({ messages }: MessageListProps) => {
@@ -26,33 +50,13 @@ const MessageList = memo(({ messages }: MessageListProps) => {
           }`}
         >
           <div
-            className={`rounded-lg p-4 max-w-[80%] ${
+            className={`rounded-lg px-4 py-2 max-w-[80%] ${
               message.role === 'user'
                 ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-900'
+                : 'bg-gray-100 dark:bg-gray-800'
             }`}
           >
-            {message.imageUrl && (
-              <div className="mb-2">
-                <Image
-                  src={message.imageUrl}
-                  alt="Uploaded image"
-                  width={300}
-                  height={300}
-                  className="rounded-lg"
-                />
-              </div>
-            )}
-            <p className="whitespace-pre-wrap">{message.content}</p>
-            {message.lowerConfidenceObjects && message.lowerConfidenceObjects.length > 0 && message.imageUrl && (
-              <div className="mt-4">
-                <p className="text-sm mb-2">Lower confidence detections (50-89%):</p>
-                <ImageCarousel
-                  imageUrl={message.imageUrl}
-                  detectedObjects={message.lowerConfidenceObjects}
-                />
-              </div>
-            )}
+            <MessageContent message={message} />
           </div>
         </div>
       ))}

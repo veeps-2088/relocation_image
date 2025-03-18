@@ -14,97 +14,131 @@ interface DetectedObject {
 }
 
 interface ImageCarouselProps {
-  imageUrl: string;
-  detectedObjects: DetectedObject[];
+  detectionResults: Array<{
+    imageUrl: string;
+    objects: {
+      lowerConfidence: Array<{
+        label: string;
+        score: string;
+        box: {
+          xmin: number;
+          ymin: number;
+          xmax: number;
+          ymax: number;
+        };
+      }>;
+    };
+  }>;
 }
 
-export default function ImageCarousel({ imageUrl, detectedObjects }: ImageCarouselProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+export default function ImageCarousel({ detectionResults }: ImageCarouselProps) {
+  const [currentObjectIndex, setCurrentObjectIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const currentImageRef = useRef<HTMLImageElement | null>(null);
+  const mounted = useRef(true);
 
-  useEffect(() => {
-    let mounted = true;
-    const img = new Image();
+  // Flatten all lower confidence objects with their corresponding image URLs
+  const allObjects = detectionResults.flatMap((result) => 
+    result.objects.lowerConfidence.map(obj => ({
+      ...obj,
+      imageUrl: result.imageUrl
+    }))
+  );
 
-    const drawImage = () => {
-      if (!mounted) return;
+  // Early return if no objects found
+  if (allObjects.length === 0) {
+    return (
+      <div className="w-full max-w-sm mx-auto mt-2 p-4 text-center text-gray-600 bg-gray-100 rounded-lg">
+        <p>No objects detected with confidence level between 50-74%</p>
+        <p className="text-sm mt-2">
+          {detectionResults.length > 0 
+            ? 'All detected objects are outside this confidence range'
+            : 'No objects detected in the images'}
+        </p>
+      </div>
+    );
+  }
 
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        console.error('Canvas not found');
-        return;
-      }
+  const drawImage = () => {
+    if (!currentImageRef.current || !canvasRef.current) return;
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        console.error('Could not get canvas context');
-        return;
-      }
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      // Set fixed canvas size
-      canvas.width = 400;
-      canvas.height = 400;
+    const currentObject = allObjects[currentObjectIndex];
+    const box = currentObject.box;
 
-      // Get current object box
-      const box = detectedObjects[currentIndex].box;
-      console.log('Current box coordinates:', box);
+    // Set canvas size
+    canvas.width = 400;
+    canvas.height = 400;
 
-      // Use box coordinates directly as they are already in pixels
-      const sourceX = box.xmin;
-      const sourceY = box.ymin;
-      const sourceWidth = box.xmax - box.xmin;
-      const sourceHeight = box.ymax - box.ymin;
+    // Calculate dimensions
+    const sourceWidth = box.xmax - box.xmin;
+    const sourceHeight = box.ymax - box.ymin;
+    const aspectRatio = sourceWidth / sourceHeight;
 
-      console.log('Source dimensions:', {
-        x: sourceX,
-        y: sourceY,
-        width: sourceWidth,
-        height: sourceHeight,
-        imageWidth: img.width,
-        imageHeight: img.height
-      });
+    // Calculate destination dimensions
+    let destWidth = canvas.width;
+    let destHeight = canvas.height;
+    
+    if (aspectRatio > 1) {
+      destHeight = canvas.width / aspectRatio;
+    } else {
+      destWidth = canvas.height * aspectRatio;
+    }
 
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Calculate centering offsets
+    const offsetX = (canvas.width - destWidth) / 2;
+    const offsetY = (canvas.height - destHeight) / 2;
 
-      try {
-        // Draw the cropped region centered in the canvas
-        ctx.drawImage(
-          img,
-          sourceX,
-          sourceY,
-          sourceWidth,
-          sourceHeight,
-          0,
-          0,
-          canvas.width,
-          canvas.height
-        );
-        console.log('Successfully drew image to canvas');
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Debug: Draw a border around the canvas to make sure we can see it
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
-      } catch (err) {
-        console.error('Error drawing image:', err);
+    try {
+      // Draw the image
+      ctx.drawImage(
+        currentImageRef.current,
+        box.xmin,
+        box.ymin,
+        sourceWidth,
+        sourceHeight,
+        offsetX,
+        offsetY,
+        destWidth,
+        destHeight
+      );
+
+      // Draw border
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(offsetX, offsetY, destWidth, destHeight);
+    } catch (err) {
+      console.error('Error drawing image:', err);
+      if (mounted.current) {
         setError('Failed to draw image');
       }
-    };
+    }
+  };
 
-    const loadImage = async () => {
+  useEffect(() => {
+    mounted.current = true;
+
+    const loadAndDrawImage = async () => {
+      if (!mounted.current) return;
+      
       try {
         setLoading(true);
         setError(null);
 
-        console.log('Loading image:', imageUrl);
+        const currentObject = allObjects[currentObjectIndex];
         
         const response = await fetch('/api/proxy-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl }),
+          body: JSON.stringify({ imageUrl: currentObject.imageUrl }),
         });
 
         if (!response.ok) {
@@ -114,62 +148,60 @@ export default function ImageCarousel({ imageUrl, detectedObjects }: ImageCarous
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
 
+        // Create new image
+        const img = new Image();
+        
         img.onload = () => {
-          if (mounted) {
-            console.log('Image loaded:', {
-              width: img.width,
-              height: img.height,
-              naturalWidth: img.naturalWidth,
-              naturalHeight: img.naturalHeight
-            });
-            drawImage();
-            setLoading(false);
+          if (!mounted.current) {
             URL.revokeObjectURL(blobUrl);
+            return;
           }
+          currentImageRef.current = img;
+          drawImage();
+          setLoading(false);
+          URL.revokeObjectURL(blobUrl);
         };
 
-        img.onerror = (e) => {
-          console.error('Image load error:', e);
-          if (mounted) {
-            setError('Failed to load image');
-            setLoading(false);
+        img.onerror = () => {
+          if (!mounted.current) {
             URL.revokeObjectURL(blobUrl);
+            return;
           }
+          setError('Failed to load image');
+          setLoading(false);
+          URL.revokeObjectURL(blobUrl);
         };
 
         img.src = blobUrl;
 
       } catch (err) {
-        console.error('Error:', err);
-        if (mounted) {
+        if (mounted.current) {
           setError(err instanceof Error ? err.message : 'Failed to load image');
           setLoading(false);
         }
       }
     };
 
-    loadImage();
+    loadAndDrawImage();
 
     return () => {
-      mounted = false;
+      mounted.current = false;
     };
-  }, [imageUrl, currentIndex, detectedObjects]);
+  }, [currentObjectIndex]); // Remove allObjects from dependencies
 
   const nextSlide = () => {
-    setCurrentIndex((prevIndex) => 
-      prevIndex === detectedObjects.length - 1 ? 0 : prevIndex + 1
+    setCurrentObjectIndex((prevIndex) => 
+      prevIndex === allObjects.length - 1 ? 0 : prevIndex + 1
     );
   };
 
   const prevSlide = () => {
-    setCurrentIndex((prevIndex) => 
-      prevIndex === 0 ? detectedObjects.length - 1 : prevIndex - 1
+    setCurrentObjectIndex((prevIndex) => 
+      prevIndex === 0 ? allObjects.length - 1 : prevIndex - 1
     );
   };
 
-  if (detectedObjects.length === 0) return null;
-
-  const currentObject = detectedObjects[currentIndex];
+  const currentObject = allObjects[currentObjectIndex];
 
   return (
     <div className="relative w-full max-w-sm mx-auto mt-2">
@@ -224,7 +256,7 @@ export default function ImageCarousel({ imageUrl, detectedObjects }: ImageCarous
             {currentObject.label} ({parseFloat(currentObject.score).toFixed(1)}% confident)
           </p>
           <p className="text-xs text-gray-300">
-            {currentIndex + 1} of {detectedObjects.length}
+            {currentObjectIndex + 1} of {allObjects.length}
           </p>
         </div>
       </div>

@@ -12,15 +12,21 @@ type ChatMessage = {
   id: string;
   content: string;
   role: 'user' | 'assistant';
-  imageUrl?: string;
-  lowerConfidenceObjects?: Array<{
-    label: string;
-    score: string;
-    box: {
-      xmin: number;
-      ymin: number;
-      xmax: number;
-      ymax: number;
+  imageUrls?: string[];
+  detectionResults?: Array<{
+    imageUrl: string;
+    objects: {
+      highConfidence: string[];
+      lowerConfidence: Array<{
+        label: string;
+        score: string;
+        box: {
+          xmin: number;
+          ymin: number;
+          xmax: number;
+          ymax: number;
+        };
+      }>;
     };
   }>;
   createdAt: Date;
@@ -45,6 +51,23 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   tv: 700,
   // Add more objects as needed
 };
+
+interface DetectionResult {
+  imageUrl: string;
+  objects: {
+    highConfidence: string[];
+    lowerConfidence: Array<{
+      label: string;
+      score: string;
+      box: {
+        xmin: number;
+        ymin: number;
+        xmax: number;
+        ymax: number;
+      };
+    }>;
+  };
+}
 
 export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
@@ -80,62 +103,78 @@ export default function ChatInterface() {
 
   const displayMessages = aiMessages;
 
-  const handleSubmitWithImage = async (e: React.FormEvent, imageUrl?: string) => {
+  const handleSubmitWithImage = async (e: React.FormEvent, imageUrls?: string[]) => {
     e.preventDefault();
     setError(null);
     
     try {
-      if (imageUrl) {
-        // Create the image message
+      if (imageUrls && imageUrls.length > 0) {
+        // Create initial message for image analysis
         const imageMessage = {
           id: Date.now().toString(),
-          content: 'Analyzing image...',
+          content: `Analyzing ${imageUrls.length} image${imageUrls.length > 1 ? 's' : ''}...`,
           role: 'user' as const,
-          imageUrl: imageUrl,
+          imageUrls: imageUrls,
           createdAt: new Date()
         };
         
         // Add image message to chat history
         setMessages([...aiMessages, imageMessage]);
 
-        // Analyze the image
-        const response = await fetch('/api/object-detection', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl }),
-        });
+        // Analyze all images
+        const detectionResults: DetectionResult[] = [];
 
-        const detectionResults = await response.json();
+        for (const imageUrl of imageUrls) {
+          const response = await fetch('/api/object-detection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl }),
+          });
 
-        // Separate objects by confidence level
-        const highConfidenceObjects = [];
-        const lowerConfidenceObjects = [];
+          const result = await response.json();
+          
+          // Process detection results
+          const highConfidenceObjects: string[] = [];
+          const lowerConfidenceObjects = [];
 
-        if (detectionResults.success) {
-          for (const result of detectionResults.results) {
-            const score = parseFloat(result.score);
-            if (score > 75) {
-              const price = OBJECT_PRICE_MAPPING[result.label.toLowerCase()] || 'N/A';
-              highConfidenceObjects.push(
-                `${result.label} (${Math.round(score)}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`
-              );
-            } else if (score >= 50 && score <= 74) {
-              lowerConfidenceObjects.push({
-                label: result.label,
-                score: result.score,
-                box: result.box
-              });
+          if (result.success) {
+            for (const detection of result.results) {
+              const score = parseFloat(detection.score);
+              if (score > 75) {
+                const price = OBJECT_PRICE_MAPPING[detection.label.toLowerCase()] || 'N/A';
+                highConfidenceObjects.push(
+                  `${detection.label} (${Math.round(score)}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`
+                );
+              } else if (score >= 50 && score <= 74) {
+                lowerConfidenceObjects.push({
+                  label: detection.label,
+                  score: detection.score,
+                  box: detection.box
+                });
+              }
             }
           }
+
+          detectionResults.push({
+            imageUrl,
+            objects: {
+              highConfidence: highConfidenceObjects,
+              lowerConfidence: lowerConfidenceObjects
+            }
+          });
         }
+
+        // Aggregate all detected objects
+        const allHighConfidenceObjects = detectionResults.flatMap(r => r.objects.highConfidence);
 
         // Update the image message with detection results
         const updatedImageMessage = {
           ...imageMessage,
-          content: highConfidenceObjects.length > 0 
-            ? `Objects detected: ${highConfidenceObjects.join(', ')}`
-            : 'No high-confidence objects detected',
-          lowerConfidenceObjects: lowerConfidenceObjects
+          content: allHighConfidenceObjects.length > 0 
+            ? `Total objects detected across ${imageUrls.length} image${imageUrls.length > 1 ? 's' : ''}: ${allHighConfidenceObjects.join(', ')}`
+            : 'No high-confidence objects detected in any image',
+          imageUrls: imageUrls,
+          detectionResults: detectionResults
         };
         
         // Update chat history with the results
@@ -144,8 +183,8 @@ export default function ChatInterface() {
         // Send to OpenAI with detection results
         await handleSubmit(e, {
           data: {
-            imageUrl,
-            detectedObjects: highConfidenceObjects
+            imageUrls,
+            detectedObjects: allHighConfidenceObjects
           }
         });
 

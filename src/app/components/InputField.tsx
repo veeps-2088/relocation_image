@@ -5,7 +5,7 @@ import { useState, useRef } from 'react';
 interface InputFieldProps {
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  onSubmit: (e: React.FormEvent, imageUrl?: string) => void;
+  onSubmit: (e: React.FormEvent, imageUrls?: string[]) => void;
   isLoading: boolean;
   onStopGeneration: () => void;
 }
@@ -17,63 +17,73 @@ export default function InputField({
   isLoading,
   onStopGeneration,
 }: InputFieldProps) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [isImageSent, setIsImageSent] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [isImagesSent, setIsImagesSent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        setSelectedImage(dataUrl);
-        setIsImageSent(false);
-      };
-      reader.readAsDataURL(file);
+    const files = Array.from(e.target.files || []);
+    const imageUrls: string[] = [];
+
+    for (const file of files) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      imageUrls.push(dataUrl);
     }
+
+    setSelectedImages(imageUrls);
+    setIsImagesSent(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (selectedImage && !isImageSent) {
-      onSubmit(e, selectedImage);
-      setSelectedImage(null);
-      setIsImageSent(true);
+    if (selectedImages.length > 0 && !isImagesSent) {
+      onSubmit(e, selectedImages);
+      setSelectedImages([]);
+      setIsImagesSent(true);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     if (input.trim()) {
-      onSubmit(e, undefined);
-      setSelectedImage(null);
-      setIsImageSent(false);
+      onSubmit(e);
+      setSelectedImages([]);
+      setIsImagesSent(false);
     }
   };
 
-  const removeImage = () => {
-    setSelectedImage(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    if (selectedImages.length === 1 && fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
     <div className="space-y-4">
-      {selectedImage && (
-        <div className="relative">
-          <img 
-            src={selectedImage} 
-            alt="Preview" 
-            className="max-h-60 rounded-lg object-contain"
-          />
-          <button
-            onClick={removeImage}
-            className="absolute top-2 right-2 bg-gray-800/50 hover:bg-gray-800/75 text-white rounded-full p-1"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
+      {selectedImages.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {selectedImages.map((image, index) => (
+            <div key={index} className="relative">
+              <img 
+                src={image} 
+                alt={`Preview ${index + 1}`} 
+                className="h-40 w-full rounded-lg object-cover"
+              />
+              <button
+                onClick={() => removeImage(index)}
+                className="absolute top-2 right-2 bg-gray-800/50 hover:bg-gray-800/75 text-white rounded-full p-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          ))}
         </div>
       )}
       <form onSubmit={handleSubmit} className="relative flex items-end space-x-2">
@@ -81,7 +91,7 @@ export default function InputField({
           <textarea
             value={input}
             onChange={handleInputChange}
-            placeholder={isImageSent ? "Add a message..." : "Type your message..."}
+            placeholder={isImagesSent ? "Add a message..." : "Type your message..."}
             className="w-full rounded-lg border pr-10 p-2 dark:bg-gray-800 dark:border-gray-700"
             rows={1}
             onKeyDown={(e) => {
@@ -96,6 +106,7 @@ export default function InputField({
             accept="image/*"
             onChange={handleImageChange}
             ref={fileInputRef}
+            multiple
             className="hidden"
           />
           <button
@@ -120,7 +131,7 @@ export default function InputField({
           <button
             type="submit"
             className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-            disabled={(!input.trim() && !selectedImage) || isLoading}
+            disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
           >
             Send
           </button>
