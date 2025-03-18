@@ -46,6 +46,7 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const currentImageRef = useRef<HTMLImageElement | null>(null);
   const mounted = useRef(true);
+  const [isComplete, setIsComplete] = useState(false);
 
   // Flatten all lower confidence objects with their corresponding image URLs
   const allObjects = detectionResults.flatMap((result) => 
@@ -75,21 +76,35 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
       const newConfirmations = new Map(prev);
       newConfirmations.set(currentObjectIndex, confirmed);
       
-      // If all objects have been confirmed, notify parent component
-      if (newConfirmations.size === allObjects.length && onObjectConfirmation) {
-        const confirmationResults = allObjects.map((obj, index) => ({
-          label: obj.label,
-          score: obj.score,
-          confirmed: newConfirmations.get(index) || false,
-          imageUrl: obj.imageUrl
-        }));
-        onObjectConfirmation(confirmationResults);
+      // Debug log for confirmation
+      console.log('Confirming object:', {
+        label: allObjects[currentObjectIndex].label,
+        score: allObjects[currentObjectIndex].score,
+        confirmed: confirmed,
+        index: currentObjectIndex
+      });
+
+      // If this is a "Yes" confirmation, send it immediately
+      if (confirmed && onObjectConfirmation) {
+        const confirmedObject = {
+          label: allObjects[currentObjectIndex].label,
+          score: allObjects[currentObjectIndex].score,
+          confirmed: true,
+          imageUrl: allObjects[currentObjectIndex].imageUrl
+        };
+        console.log('Sending immediate confirmation:', confirmedObject);
+        onObjectConfirmation([confirmedObject]);
+      }
+      
+      // If this was the last object, mark as complete
+      if (currentObjectIndex === allObjects.length - 1 || newConfirmations.size === allObjects.length) {
+        setIsComplete(true);
       }
       
       return newConfirmations;
     });
 
-    // Automatically move to next object after confirmation
+    // Move to next object if available
     if (currentObjectIndex < allObjects.length - 1) {
       setCurrentObjectIndex(prev => prev + 1);
     }
@@ -226,6 +241,19 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
   const currentObject = allObjects[currentObjectIndex];
   const isConfirmed = confirmedObjects.has(currentObjectIndex);
 
+  if (isComplete) {
+    return (
+      <div className="w-full max-w-sm mx-auto mt-2 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+        <p className="text-green-700 font-medium mb-2">
+          ✓ All objects have been reviewed!
+        </p>
+        <p className="text-sm text-gray-600">
+          Please type "update list" or "show summary" to see your updated moving cost estimate.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full max-w-sm mx-auto mt-2">
       <div className="relative aspect-square overflow-hidden rounded-lg bg-gray-100">
@@ -301,10 +329,6 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
               ✓ Confirmed: {confirmedObjects.get(currentObjectIndex) ? 'Yes' : 'No'}
             </p>
           )}
-
-          <p className="text-xs text-gray-300">
-            {currentObjectIndex + 1} of {allObjects.length}
-          </p>
         </div>
       </div>
 

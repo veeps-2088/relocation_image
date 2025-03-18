@@ -56,7 +56,9 @@ const MessageList = memo(({ messages }: MessageListProps) => {
                 : 'bg-gray-100 dark:bg-gray-800'
             }`}
           >
-            <MessageContent message={message} />
+            <div className="whitespace-pre-wrap">
+              <MessageContent message={message} />
+            </div>
           </div>
         </div>
       ))}
