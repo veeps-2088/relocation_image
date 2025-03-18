@@ -114,12 +114,12 @@ export default function ChatInterface() {
         if (detectionResults.success) {
           for (const result of detectionResults.results) {
             const score = parseFloat(result.score);
-            if (score > 90) {
+            if (score > 75) {
               const price = OBJECT_PRICE_MAPPING[result.label.toLowerCase()] || 'N/A';
               highConfidenceObjects.push(
                 `${result.label} (${Math.round(score)}% confident${price !== 'N/A' ? `, Est. $${price}` : ''})`
               );
-            } else if (score >= 50 && score <= 89) {
+            } else if (score >= 50 && score <= 74) {
               lowerConfidenceObjects.push({
                 label: result.label,
                 score: result.score,
