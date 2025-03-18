@@ -69,6 +69,78 @@ interface DetectionResult {
   };
 }
 
+// Add a new type for aggregated items
+interface AggregatedItem {
+  name: string;
+  count: number;
+  priceEach: number;
+  totalPrice: number;
+}
+
+// Add a helper function to aggregate and format the results
+const aggregateDetectionResults = (highConfidenceObjects: string[]): {
+  items: AggregatedItem[];
+  totalCost: number;
+} => {
+  const itemCounts = new Map<string, { count: number; price: number }>();
+
+  // Process each detected object
+  highConfidenceObjects.forEach(obj => {
+    // Extract the base label (remove confidence and price info)
+    const match = obj.match(/^([^(]+)/);
+    if (!match) return;
+    
+    const label = match[1].trim().toLowerCase();
+    const price = OBJECT_PRICE_MAPPING[label] || 0;
+
+    // Skip items with no price or people
+    if (price === 0) return;
+
+    // Update counts
+    const existing = itemCounts.get(label);
+    if (existing) {
+      itemCounts.set(label, { 
+        count: existing.count + 1,
+        price
+      });
+    } else {
+      itemCounts.set(label, { count: 1, price });
+    }
+  });
+
+  // Convert to array and sort by total price
+  const items: AggregatedItem[] = Array.from(itemCounts.entries())
+    .map(([name, { count, price }]) => ({
+      name,
+      count,
+      priceEach: price,
+      totalPrice: count * price
+    }))
+    .sort((a, b) => b.totalPrice - a.totalPrice);
+
+  // Calculate total cost
+  const totalCost = items.reduce((sum, item) => sum + item.totalPrice, 0);
+
+  return { items, totalCost };
+};
+
+// Add a function to format the summary message
+const formatSummaryMessage = (items: AggregatedItem[], totalCost: number): string => {
+  const itemLines = items.map((item, index) => {
+    const itemText = `${index + 1}. ${item.name.charAt(0).toUpperCase() + item.name.slice(1)} x ${item.count} ` +
+      `($${item.priceEach.toLocaleString()} each) = $${item.totalPrice.toLocaleString()}`;
+    return itemText;
+  });
+
+  return `Based on the objects detected in the images and their estimated values, here is a breakdown of potential moving costs:
+
+${itemLines.join('\n')}
+
+Total estimated moving cost for the identified items: $${totalCost.toLocaleString()}
+
+Please note that this estimate is based on the objects detected in the images provided. Additional costs may apply depending on the size of the move, distance, additional items, and any specific moving services required.`;
+};
+
 export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -167,12 +239,13 @@ export default function ChatInterface() {
         // Aggregate all detected objects
         const allHighConfidenceObjects = detectionResults.flatMap(r => r.objects.highConfidence);
 
+        // After processing all images and getting allHighConfidenceObjects:
+        const { items, totalCost } = aggregateDetectionResults(allHighConfidenceObjects);
+        
         // Update the image message with detection results
         const updatedImageMessage = {
           ...imageMessage,
-          content: allHighConfidenceObjects.length > 0 
-            ? `Total objects detected across ${imageUrls.length} image${imageUrls.length > 1 ? 's' : ''}: ${allHighConfidenceObjects.join(', ')}`
-            : 'No high-confidence objects detected in any image',
+          content: formatSummaryMessage(items, totalCost),
           imageUrls: imageUrls,
           detectionResults: detectionResults
         };
@@ -184,7 +257,8 @@ export default function ChatInterface() {
         await handleSubmit(e, {
           data: {
             imageUrls,
-            detectedObjects: allHighConfidenceObjects
+            detectedObjects: allHighConfidenceObjects,
+            summary: { items, totalCost }
           }
         });
 
