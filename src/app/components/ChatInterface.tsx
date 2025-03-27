@@ -49,7 +49,9 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   computer: 1500,
   phone: 800,
   tv: 700,
-  book: 15, // Add average price for books
+  book: 15, 
+  piano: 1000,
+  book_shelf: 200// Add average price for books
   // Add more objects as needed
 };
 

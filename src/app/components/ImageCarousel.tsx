@@ -248,7 +248,7 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
           ✓ All objects have been reviewed!
         </p>
         <p className="text-sm text-gray-600">
-          Please type "update list" or "show summary" to see your updated moving cost estimate.
+          Please type "show summary" to see your updated moving cost estimate.
         </p>
       </div>
     );
