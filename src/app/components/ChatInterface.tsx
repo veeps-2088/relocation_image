@@ -119,7 +119,7 @@ const formatSummaryMessage = (items: AggregatedItem[], totalCost: number): strin
     return itemText;
   });
 
-  return `Sure! Based on the updated list, here is the revised breakdown of potential moving costs:
+  return `Sure! Based on the updated list, here is the estimated costs of the objects detected:
 
 ${itemLines.join('\n')}
 
