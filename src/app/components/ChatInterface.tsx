@@ -10,6 +10,8 @@ import ImageCarousel from './ImageCarousel';
 import { useAgentPlanning } from '@/lib/hooks/useAgentPlanning';
 import { AgentContextProvider } from '@/lib/contexts/AgentContext';
 import { Message, AgentAction } from '@/lib/types/agent';
+import { useDetection } from '@/lib/contexts/DetectionContext';
+import { useEnhancedPlanning } from '@/lib/hooks/useEnhancedPlanning';
 
 interface DetectionResult {
   imageUrl: string;
@@ -157,7 +159,8 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { plan, executeAction } = useAgentPlanning();
+  const { setDetectionResults, setAggregatedItems } = useDetection();
+  const { plan, executeAction } = useEnhancedPlanning();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -203,6 +206,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         const detectionResponse = await executeAction(detectAction);
         console.log('✅ Detection response:', detectionResponse);
 
+        // Store detection results in context
+        setDetectionResults(detectionResponse.detectionResults || []);
+
         // Get high confidence objects for cost estimation
         const highConfidenceObjects = detectionResponse.detectionResults?.flatMap(result => 
           result.objects.highConfidence
@@ -212,6 +218,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         // Estimate costs
         const { items, totalCost } = aggregateDetectionResults(highConfidenceObjects);
         console.log('💰 Cost estimation results:', { items, totalCost });
+
+        // Store aggregated items in context
+        setAggregatedItems(items, totalCost);
 
         // Create assistant message with detection results and cost estimation
         const assistantMessage: Message = {
@@ -225,7 +234,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         console.log('🤖 Assistant message created:', assistantMessage);
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
-        // For text-only messages, use the planning system
+        // For text-only messages, use the enhanced planning system
         console.log('🤖 Planning actions...');
         const actions = await plan(input, imageUrls);
         console.log('📋 Planned actions:', actions);
@@ -234,18 +243,18 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
           console.log('⚡ Executing action:', action.type);
           const response = await executeAction(action);
           console.log('✅ Action response:', response);
+
+          // Create assistant message based on the action response
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: response.message || 'I have processed your request.',
+            role: 'assistant',
+            timestamp: new Date().toISOString(),
+          };
+
+          console.log('🤖 Assistant message created:', assistantMessage);
+          setMessages((prev) => [...prev, assistantMessage]);
         }
-
-        // Create assistant message
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: 'I have processed your message.',
-          role: 'assistant',
-          timestamp: new Date().toISOString(),
-        };
-
-        console.log('🤖 Assistant message created:', assistantMessage);
-        setMessages((prev) => [...prev, assistantMessage]);
       }
     } catch (error) {
       console.error('❌ Error processing message:', error);
