@@ -141,7 +141,18 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // If no initial messages are provided, start with the welcome message
+    if (initialMessages.length === 0) {
+      return [{
+        id: 'welcome',
+        content: "Hi there, I'm your relocation buddy! 👋 To help estimate the value of your items, could you please upload an image of your household items?",
+        role: 'assistant',
+        timestamp: new Date().toISOString()
+      }];
+    }
+    return initialMessages;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
