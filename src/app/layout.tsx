@@ -1,4 +1,6 @@
 import "./globals.css";
+import { AgentContextProvider } from '@/lib/contexts/AgentContext';
+import { DetectionProvider } from '@/lib/contexts/DetectionContext';
 
 export default function RootLayout({
   children,
@@ -7,7 +9,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AgentContextProvider>
+          <DetectionProvider>
+            {children}
+          </DetectionProvider>
+        </AgentContextProvider>
+      </body>
     </html>
   );
 }
