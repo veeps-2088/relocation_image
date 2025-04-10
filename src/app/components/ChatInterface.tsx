@@ -146,7 +146,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
     if (initialMessages.length === 0) {
       return [{
         id: 'welcome',
-        content: "Hi there, I'm your relocation buddy! 👋 To help estimate the value of your items, could you please upload an image of your household items?",
+        content: "Hi there, I'm your relocation buddy! 👋 To help estimate the value of your items, you can upload one or more images of your household items. I'll analyze them and provide you with a cost estimate.",
         role: 'assistant',
         timestamp: new Date().toISOString()
       }];
@@ -180,7 +180,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       // Create user message
       const userMessage: Message = {
         id: Date.now().toString(),
-        content: input || 'Analyze this image',
+        content: input || (imageUrls ? 'Analyze these images' : ''),
         role: 'user',
         timestamp: new Date().toISOString(),
         imageUrls,
@@ -192,7 +192,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
       // If we have images, prioritize object detection
       if (imageUrls && imageUrls.length > 0) {
-        console.log('🖼️ Processing image for object detection');
+        console.log('🖼️ Processing images for object detection');
         const detectAction: AgentAction = {
           type: 'detect_objects',
           payload: { imageUrls },
@@ -204,7 +204,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         console.log('✅ Detection response:', detectionResponse);
 
         // Get high confidence objects for cost estimation
-        const highConfidenceObjects = detectionResponse.detectionResults?.[0]?.objects.highConfidence || [];
+        const highConfidenceObjects = detectionResponse.detectionResults?.flatMap(result => 
+          result.objects.highConfidence
+        ) || [];
         console.log('💰 High confidence objects for cost estimation:', highConfidenceObjects);
 
         // Estimate costs
