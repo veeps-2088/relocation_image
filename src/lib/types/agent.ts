@@ -38,38 +38,15 @@ export interface AgentResponse {
   action: AgentAction;
   reasoning: string;
   confidence: number;
-  detectionResults?: Array<{
-    imageUrl: string;
-    objects: {
-      highConfidence: string[];
-      lowerConfidence: Array<{
-        label: string;
-        score: string;
-        box: {
-          xmin: number;
-          ymin: number;
-          xmax: number;
-          ymax: number;
-        };
-      }>;
-    };
-  }>;
-  summary?: {
-    items: Array<{
-      name: string;
-      count: number;
-      priceEach: number;
-      totalPrice: number;
-    }>;
-    totalCost: number;
-  };
+  content?: string;
+  detectionResults?: DetectionResult[];
+  items?: AggregatedItem[];
+  totalCost?: number;
   analysis?: {
-    intent: 'image_analysis' | 'text_query';
+    intent: string;
     requiresImages: boolean;
     requiresCostEstimation: boolean;
   };
-  items?: any[];
-  totalCost?: number;
 }
 
 export interface AgentContext {
@@ -104,13 +81,19 @@ export interface Message {
 }
 
 export interface DetectionResult {
-  label: string;
-  confidence: number;
-  box: {
-    xmin: number;
-    ymin: number;
-    xmax: number;
-    ymax: number;
+  imageUrl: string;
+  objects: {
+    highConfidence: string[];
+    lowerConfidence: Array<{
+      label: string;
+      score: string;
+      box: {
+        xmin: number;
+        ymin: number;
+        xmax: number;
+        ymax: number;
+      };
+    }>;
   };
 }
 
@@ -122,6 +105,13 @@ export interface CostEstimation {
     unitCost: number;
     totalCost: number;
   }>;
+}
+
+export interface AggregatedItem {
+  name: string;
+  count: number;
+  priceEach: number;
+  totalPrice: number;
 }
 
 export interface AgentContextType {

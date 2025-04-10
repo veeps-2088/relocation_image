@@ -144,7 +144,6 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>(() => {
-    // If no initial messages are provided, start with the welcome message
     if (initialMessages.length === 0) {
       return [{
         id: 'welcome',
@@ -159,7 +158,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { setDetectionResults, setAggregatedItems } = useDetection();
+  const { setDetectionResults, setAggregatedItems, addMessage } = useDetection();
   const { plan, executeAction } = useEnhancedPlanning();
 
   const scrollToBottom = () => {
@@ -191,6 +190,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
       console.log('👤 User message created:', userMessage);
       setMessages((prev) => [...prev, userMessage]);
+      addMessage(userMessage); // Add to context
       setInput(''); // Clear input after submission
 
       // If we have images, prioritize object detection
@@ -233,6 +233,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
         console.log('🤖 Assistant message created:', assistantMessage);
         setMessages((prev) => [...prev, assistantMessage]);
+        addMessage(assistantMessage); // Add to context
       } else {
         // For text-only messages, use the enhanced planning system
         console.log('🤖 Planning actions...');
@@ -247,13 +248,14 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
           // Create assistant message based on the action response
           const assistantMessage: Message = {
             id: (Date.now() + 1).toString(),
-            content: response.message || 'I have processed your request.',
+            content: response.content || 'I have processed your request.',
             role: 'assistant',
             timestamp: new Date().toISOString(),
           };
 
           console.log('🤖 Assistant message created:', assistantMessage);
           setMessages((prev) => [...prev, assistantMessage]);
+          addMessage(assistantMessage); // Add to context
         }
       }
     } catch (error) {
