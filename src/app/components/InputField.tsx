@@ -3,19 +3,19 @@
 import { useState, useRef } from 'react';
 
 interface InputFieldProps {
-  input: string;
-  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onSubmit: (e: React.FormEvent, imageUrls?: string[]) => void;
+  onImageUpload: (file: File) => Promise<string[]>;
   isLoading: boolean;
-  onStopGeneration: () => void;
 }
 
 export default function InputField({
-  input,
-  handleInputChange,
+  value,
+  onChange,
   onSubmit,
+  onImageUpload,
   isLoading,
-  onStopGeneration,
 }: InputFieldProps) {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isImagesSent, setIsImagesSent] = useState(false);
@@ -26,12 +26,12 @@ export default function InputField({
     const imageUrls: string[] = [];
 
     for (const file of files) {
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      imageUrls.push(dataUrl);
+      try {
+        const uploadedUrls = await onImageUpload(file);
+        imageUrls.push(...uploadedUrls);
+      } catch (error) {
+        console.error('Error uploading image:', error);
+      }
     }
 
     setSelectedImages(imageUrls);
@@ -49,7 +49,7 @@ export default function InputField({
       return;
     }
 
-    if (input.trim()) {
+    if (value.trim()) {
       onSubmit(e);
       setSelectedImages([]);
       setIsImagesSent(false);
@@ -89,8 +89,8 @@ export default function InputField({
       <form onSubmit={handleSubmit} className="relative flex items-end space-x-2">
         <div className="flex-1 relative">
           <textarea
-            value={input}
-            onChange={handleInputChange}
+            value={value}
+            onChange={onChange}
             placeholder={isImagesSent ? "Add a message..." : "Type your message..."}
             className="w-full rounded-lg border pr-10 p-2 dark:bg-gray-800 dark:border-gray-700"
             rows={1}
@@ -119,23 +119,13 @@ export default function InputField({
             </svg>
           </button>
         </div>
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={onStopGeneration}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-            disabled={(!input.trim() && selectedImages.length === 0) || isLoading}
-          >
-            Send
-          </button>
-        )}
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg"
+          disabled={(!value.trim() && selectedImages.length === 0) || isLoading}
+        >
+          {isLoading ? 'Sending...' : 'Send'}
+        </button>
       </form>
     </div>
   );
