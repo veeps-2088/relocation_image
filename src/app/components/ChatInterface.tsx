@@ -1,6 +1,5 @@
 'use client';
 
-import { useChat } from 'ai/react';
 import { useState, useRef, useEffect } from 'react';
 import MessageList from './MessageList';
 import InputField from './InputField';
@@ -8,10 +7,10 @@ import ErrorDisplay from './ErrorDisplay';
 import LoadingIndicator from './LoadingIndicator';
 import ImageCarousel from './ImageCarousel';
 import { useAgentPlanning } from '@/lib/hooks/useAgentPlanning';
-import { AgentContextProvider } from '@/lib/contexts/AgentContext';
 import { Message, AgentAction } from '@/lib/types/agent';
 import { useDetection } from '@/lib/contexts/DetectionContext';
 import { useEnhancedPlanning } from '@/lib/hooks/useEnhancedPlanning';
+import { useChat } from '@/lib/contexts/ChatContext';
 
 interface DetectionResult {
   imageUrl: string;
@@ -143,7 +142,8 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>(() => {
+  const { messages: supabaseMessages, addMessage, isLoading: isSupabaseLoading, uploadChatImage } = useChat();
+  const [localMessages, setLocalMessages] = useState<Message[]>(() => {
     if (initialMessages.length === 0) {
       return [{
         id: 'welcome',
@@ -154,11 +154,10 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
     }
     return initialMessages;
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { setDetectionResults, setAggregatedItems, addMessage } = useDetection();
+  const { setDetectionResults, setAggregatedItems } = useDetection();
   const { plan, executeAction } = useEnhancedPlanning();
 
   const scrollToBottom = () => {
@@ -167,7 +166,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [localMessages]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -175,7 +174,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
   const handleSubmit = async (e: React.FormEvent, imageUrls?: string[]) => {
     e.preventDefault();
-    setIsLoading(true);
+    
     try {
       console.log('📝 Processing message:', { input, imageUrls });
       
@@ -189,8 +188,12 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       };
 
       console.log('👤 User message created:', userMessage);
-      setMessages((prev) => [...prev, userMessage]);
-      addMessage(userMessage); // Add to context
+      setLocalMessages((prev) => [...prev, userMessage]);
+      await addMessage({
+        role: 'user',
+        content: userMessage.content,
+        image_url: imageUrls?.[0] // Store first image URL if exists
+      });
       setInput(''); // Clear input after submission
 
       // If we have images, prioritize object detection
@@ -232,8 +235,11 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         };
 
         console.log('🤖 Assistant message created:', assistantMessage);
-        setMessages((prev) => [...prev, assistantMessage]);
-        addMessage(assistantMessage); // Add to context
+        setLocalMessages((prev) => [...prev, assistantMessage]);
+        await addMessage({
+          role: 'assistant',
+          content: assistantMessage.content
+        });
       } else {
         // For text-only messages, use the enhanced planning system
         console.log('🤖 Planning actions...');
@@ -248,36 +254,48 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
           // Create assistant message based on the action response
           const assistantMessage: Message = {
             id: (Date.now() + 1).toString(),
-            content: response.content || 'I have processed your request.',
+            content: response.content || 'I processed your request.',
             role: 'assistant',
-            timestamp: new Date().toISOString(),
+            timestamp: new Date().toISOString()
           };
 
           console.log('🤖 Assistant message created:', assistantMessage);
-          setMessages((prev) => [...prev, assistantMessage]);
-          addMessage(assistantMessage); // Add to context
+          setLocalMessages((prev) => [...prev, assistantMessage]);
+          await addMessage({
+            role: 'assistant',
+            content: assistantMessage.content
+          });
         }
       }
     } catch (error) {
-      console.error('❌ Error processing message:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Error processing message:', error);
+      // Handle error appropriately
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    try {
+      const imageUrl = await uploadChatImage(file);
+      return [imageUrl];
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return [];
     }
   };
 
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto p-4">
-      <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} />
+    <div className="flex flex-col h-screen">
+      <div className="flex-1 overflow-y-auto p-4">
+        <MessageList messages={localMessages} />
         <div ref={messagesEndRef} />
       </div>
-      <div className="mt-auto pt-4">
+      <div className="border-t p-4">
         <InputField
-          input={input}
-          handleInputChange={handleInputChange}
+          value={input}
+          onChange={handleInputChange}
           onSubmit={handleSubmit}
-          isLoading={isLoading}
-          onStopGeneration={() => {}}
+          onImageUpload={handleImageUpload}
+          isLoading={isSupabaseLoading}
         />
       </div>
     </div>
