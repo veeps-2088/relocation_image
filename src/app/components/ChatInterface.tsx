@@ -164,6 +164,31 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [hasProcessedImage, setHasProcessedImage] = useState(false);
 
+  const formatDetectionResponse = (objects: string[]): string => {
+    // Count occurrences of each object
+    const objectCounts: { [key: string]: number } = {};
+    objects.forEach(obj => {
+      const normalizedObj = obj.toLowerCase().trim();
+      objectCounts[normalizedObj] = (objectCounts[normalizedObj] || 0) + 1;
+    });
+
+    // Format the response
+    const lines = Object.entries(objectCounts)
+      .filter(([obj]) => OBJECT_PRICE_MAPPING[obj] > 0) // Only include items with a price
+      .map(([obj, count]) => {
+        const price = OBJECT_PRICE_MAPPING[obj];
+        const total = price * count;
+        const objName = obj.charAt(0).toUpperCase() + obj.slice(1);
+        return `${objName}${count > 1 ? ` x ${count}` : ''} = $${total.toLocaleString()}`;
+      });
+
+    if (lines.length === 0) {
+      return "No items with known prices were detected in the image.";
+    }
+
+    return `Here are the objects detected:\n${lines.map((line, index) => `${index + 1}. ${line}`).join('\n')}`;
+  };
+
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: '/api/openai/chat',
     body: {
@@ -224,6 +249,18 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       };
 
       setLocalMessages(prev => [...prev, imageMessage]);
+
+      // Add formatted detection response
+      if (detectionResponse.detectionResults?.[0]?.objects?.highConfidence) {
+        const formattedResponse = formatDetectionResponse(detectionResponse.detectionResults[0].objects.highConfidence);
+        const responseMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: formattedResponse,
+          timestamp: new Date().toISOString()
+        };
+        setLocalMessages(prev => [...prev, responseMessage]);
+      }
 
       return [imageUrl];
     } catch (error) {
