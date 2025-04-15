@@ -163,6 +163,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const { executeAction } = useEnhancedPlanning();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [hasProcessedImage, setHasProcessedImage] = useState(false);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
 
   const formatDetectionResponse = (objects: string[]): string => {
     // Count occurrences of each object
@@ -218,13 +219,29 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
   const handleImageUpload = async (file: File) => {
     try {
-      // Upload the image
-      const imageUrl = await uploadChatImage(file);
+      setIsProcessingImage(true);
+
+      // Create a temporary URL for immediate preview
+      const tempImageUrl = URL.createObjectURL(file);
+
+      // Add image message to chat immediately
+      const tempImageMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: 'I uploaded an image for analysis',
+        imageUrls: [tempImageUrl],
+        timestamp: new Date().toISOString()
+      };
+
+      setLocalMessages(prev => [...prev, tempImageMessage]);
+
+      // Upload the image to storage
+      const uploadedImageUrl = await uploadChatImage(file);
       
       // Run object detection
       const detectAction = {
         type: 'detect_objects',
-        payload: { imageUrls: [imageUrl] },
+        payload: { imageUrls: [uploadedImageUrl] },
         timestamp: Date.now()
       };
 
@@ -235,20 +252,24 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       // Store detection results in context
       if (detectionResponse.detectionResults) {
         setDetectionResults(detectionResponse.detectionResults);
-        setHasProcessedImage(false); // Reset the flag when a new image is uploaded
+        setHasProcessedImage(false);
       }
 
-      // Add image message to chat
-      const imageMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: 'I uploaded an image for analysis',
-        imageUrls: [imageUrl],
-        detectionResults: detectionResponse.detectionResults,
-        timestamp: new Date().toISOString()
+      // Update the image message with the uploaded URL and detection results
+      const updatedImageMessage: ChatMessage = {
+        ...tempImageMessage,
+        imageUrls: [uploadedImageUrl],
+        detectionResults: detectionResponse.detectionResults
       };
 
-      setLocalMessages(prev => [...prev, imageMessage]);
+      setLocalMessages(prev => {
+        const updatedMessages = [...prev];
+        const messageIndex = updatedMessages.findIndex(msg => msg.id === tempImageMessage.id);
+        if (messageIndex !== -1) {
+          updatedMessages[messageIndex] = updatedImageMessage;
+        }
+        return updatedMessages;
+      });
 
       // Add formatted detection response
       if (detectionResponse.detectionResults?.[0]?.objects?.highConfidence) {
@@ -262,10 +283,14 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         setLocalMessages(prev => [...prev, responseMessage]);
       }
 
-      return [imageUrl];
+      return [uploadedImageUrl];
     } catch (error) {
       console.error('Error processing image:', error);
+      // Remove the temporary message if there was an error
+      setLocalMessages(prev => prev.filter(msg => msg.id !== Date.now().toString()));
       return [];
+    } finally {
+      setIsProcessingImage(false);
     }
   };
 
@@ -300,7 +325,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
           onChange={handleInputChange}
           onSubmit={(e) => handleSubmit(e)}
           onImageUpload={handleImageUpload}
-          isLoading={isLoading}
+          isLoading={isLoading || isProcessingImage}
         />
       </div>
     </div>
