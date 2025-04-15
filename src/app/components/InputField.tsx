@@ -6,7 +6,7 @@ interface InputFieldProps {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onSubmit: (e: React.FormEvent, imageUrls?: string[]) => void;
-  onImageUpload: (file: File) => Promise<string[]>;
+  onImageUpload: (files: File[]) => Promise<string[]>;
   isLoading: boolean;
 }
 
@@ -24,11 +24,11 @@ export default function InputField({
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
       try {
-        await onImageUpload(files[0]);
+        await onImageUpload(files);
         setIsImagesSent(true);
         if (fileInputRef.current) fileInputRef.current.value = '';
       } catch (error) {
-        console.error('Error uploading image:', error);
+        console.error('Error uploading images:', error);
       }
     }
   };
@@ -48,7 +48,7 @@ export default function InputField({
           <textarea
             value={value}
             onChange={onChange}
-            placeholder={isImagesSent ? "Add a message..." : "Type your message..."}
+            placeholder={isImagesSent ? "Add a message..." : "Type your message or upload images..."}
             className="w-full rounded-lg border pr-10 p-2 dark:bg-gray-800 dark:border-gray-700"
             rows={1}
             onKeyDown={(e) => {
@@ -64,6 +64,7 @@ export default function InputField({
             onChange={handleImageChange}
             ref={fileInputRef}
             className="hidden"
+            multiple
           />
           <button
             type="button"

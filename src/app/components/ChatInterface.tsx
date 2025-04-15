@@ -47,7 +47,6 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   motorcycle: 8000,
   bus: 100000,
   chair: 150,
-  sofa: 1000,
   couch: 1000,
   potted_plant: 100,
   table: 500,
@@ -173,18 +172,21 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       objectCounts[normalizedObj] = (objectCounts[normalizedObj] || 0) + 1;
     });
 
-    // Format the response
-    const lines = Object.entries(objectCounts)
-      .filter(([obj]) => OBJECT_PRICE_MAPPING[obj] > 0) // Only include items with a price
-      .map(([obj, count]) => {
-        const price = OBJECT_PRICE_MAPPING[obj];
+    // Format all items into a single list
+    const lines = Object.entries(objectCounts).map(([obj, count]) => {
+      const objName = obj.charAt(0).toUpperCase() + obj.slice(1);
+      const price = OBJECT_PRICE_MAPPING[obj];
+      
+      if (price > 0) {
         const total = price * count;
-        const objName = obj.charAt(0).toUpperCase() + obj.slice(1);
         return `${objName}${count > 1 ? ` x ${count}` : ''} = $${total.toLocaleString()}`;
-      });
+      } else {
+        return `${objName}${count > 1 ? ` x ${count}` : ''}`;
+      }
+    });
 
     if (lines.length === 0) {
-      return "No items with known prices were detected in the image.";
+      return "No objects were detected in the image.";
     }
 
     return `Here are the objects detected:\n${lines.map((line, index) => `${index + 1}. ${line}`).join('\n')}`;
@@ -217,31 +219,39 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages, localMessages]);
 
-  const handleImageUpload = async (file: File) => {
+  const handleImageUpload = async (files: File[]) => {
     try {
       setIsProcessingImage(true);
 
-      // Create a temporary URL for immediate preview
-      const tempImageUrl = URL.createObjectURL(file);
+      // Process all files in parallel
+      const uploadPromises = files.map(async (file) => {
+        // Create a temporary URL for immediate preview
+        const tempImageUrl = URL.createObjectURL(file);
+        return { file, tempImageUrl };
+      });
 
-      // Add image message to chat immediately
+      const uploadedFiles = await Promise.all(uploadPromises);
+
+      // Add image message to chat immediately with all temp URLs
       const tempImageMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'user',
-        content: 'I uploaded an image for analysis',
-        imageUrls: [tempImageUrl],
+        content: `I uploaded ${files.length} image${files.length > 1 ? 's' : ''} for analysis`,
+        imageUrls: uploadedFiles.map(f => f.tempImageUrl),
         timestamp: new Date().toISOString()
       };
 
       setLocalMessages(prev => [...prev, tempImageMessage]);
 
-      // Upload the image to storage
-      const uploadedImageUrl = await uploadChatImage(file);
+      // Upload all images to storage
+      const uploadedImageUrls = await Promise.all(
+        uploadedFiles.map(async ({ file }) => uploadChatImage(file))
+      );
       
-      // Run object detection
+      // Run object detection on all images
       const detectAction = {
         type: 'detect_objects',
-        payload: { imageUrls: [uploadedImageUrl] },
+        payload: { imageUrls: uploadedImageUrls },
         timestamp: Date.now()
       };
 
@@ -255,10 +265,10 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         setHasProcessedImage(false);
       }
 
-      // Update the image message with the uploaded URL and detection results
+      // Update the image message with the uploaded URLs and detection results
       const updatedImageMessage: ChatMessage = {
         ...tempImageMessage,
-        imageUrls: [uploadedImageUrl],
+        imageUrls: uploadedImageUrls,
         detectionResults: detectionResponse.detectionResults
       };
 
@@ -273,7 +283,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
       // Add formatted detection response
       if (detectionResponse.detectionResults?.[0]?.objects?.highConfidence) {
-        const formattedResponse = formatDetectionResponse(detectionResponse.detectionResults[0].objects.highConfidence);
+        const formattedResponse = formatDetectionResponse(
+          detectionResponse.detectionResults.flatMap(result => result.objects.highConfidence)
+        );
         const responseMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -283,9 +295,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
         setLocalMessages(prev => [...prev, responseMessage]);
       }
 
-      return [uploadedImageUrl];
+      return uploadedImageUrls;
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error('Error processing images:', error);
       // Remove the temporary message if there was an error
       setLocalMessages(prev => prev.filter(msg => msg.id !== Date.now().toString()));
       return [];
