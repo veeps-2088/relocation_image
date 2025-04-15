@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useChat } from 'ai/react';
 import MessageList from './MessageList';
 import InputField from './InputField';
 import ErrorDisplay from './ErrorDisplay';
@@ -10,7 +11,7 @@ import { useAgentPlanning } from '@/lib/hooks/useAgentPlanning';
 import { Message, AgentAction } from '@/lib/types/agent';
 import { useDetection } from '@/lib/contexts/DetectionContext';
 import { useEnhancedPlanning } from '@/lib/hooks/useEnhancedPlanning';
-import { useChat } from '@/lib/contexts/ChatContext';
+import { useChat as useChatContext } from '@/lib/contexts/ChatContext';
 
 interface DetectionResult {
   imageUrl: string;
@@ -29,10 +30,13 @@ interface DetectionResult {
   };
 }
 
-type ChatMessage = Omit<Message, 'role'> & {
+type ChatMessage = {
+  id: string;
   role: 'user' | 'assistant';
+  content: string;
   imageUrls?: string[];
   detectionResults?: DetectionResult[];
+  timestamp: string;
 };
 
 const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
@@ -138,12 +142,12 @@ interface ObjectConfirmation {
 }
 
 interface ChatInterfaceProps {
-  initialMessages?: Message[];
+  initialMessages?: ChatMessage[];
 }
 
 export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
-  const { messages: supabaseMessages, addMessage, isLoading: isSupabaseLoading, uploadChatImage } = useChat();
-  const [localMessages, setLocalMessages] = useState<Message[]>(() => {
+  const { uploadChatImage } = useChatContext();
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => {
     if (initialMessages.length === 0) {
       return [{
         id: 'welcome',
@@ -154,11 +158,30 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
     }
     return initialMessages;
   });
-  const [input, setInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { setDetectionResults, setAggregatedItems } = useDetection();
-  const { plan, executeAction } = useEnhancedPlanning();
+  const { detectionResults, setDetectionResults } = useDetection();
+  const { executeAction } = useEnhancedPlanning();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [hasProcessedImage, setHasProcessedImage] = useState(false);
+
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+    api: '/api/openai/chat',
+    body: {
+      data: detectionResults.length > 0 && !hasProcessedImage ? {
+        imageUrl: detectionResults[0].imageUrl,
+        detectedObjects: detectionResults[0].objects.highConfidence.join(', ')
+      } : undefined
+    },
+    onResponse: (response) => {
+      console.log('Response received:', response);
+      if (detectionResults.length > 0) {
+        setHasProcessedImage(true);
+      }
+    },
+    onError: (error) => {
+      console.error('Error:', error);
+    }
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -166,136 +189,81 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [localMessages]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-  };
-
-  const handleSubmit = async (e: React.FormEvent, imageUrls?: string[]) => {
-    e.preventDefault();
-    
-    try {
-      console.log('📝 Processing message:', { input, imageUrls });
-      
-      // Create user message
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        content: input || (imageUrls ? 'Analyze these images' : ''),
-        role: 'user',
-        timestamp: new Date().toISOString(),
-        imageUrls,
-      };
-
-      console.log('👤 User message created:', userMessage);
-      setLocalMessages((prev) => [...prev, userMessage]);
-      await addMessage({
-        role: 'user',
-        content: userMessage.content,
-        image_url: imageUrls?.[0] // Store first image URL if exists
-      });
-      setInput(''); // Clear input after submission
-
-      // If we have images, prioritize object detection
-      if (imageUrls && imageUrls.length > 0) {
-        console.log('🖼️ Processing images for object detection');
-        const detectAction: AgentAction = {
-          type: 'detect_objects',
-          payload: { imageUrls },
-          timestamp: Date.now()
-        };
-
-        console.log('⚡ Executing object detection:', detectAction);
-        const detectionResponse = await executeAction(detectAction);
-        console.log('✅ Detection response:', detectionResponse);
-
-        // Store detection results in context
-        setDetectionResults(detectionResponse.detectionResults || []);
-
-        // Get high confidence objects for cost estimation
-        const highConfidenceObjects = detectionResponse.detectionResults?.flatMap(result => 
-          result.objects.highConfidence
-        ) || [];
-        console.log('💰 High confidence objects for cost estimation:', highConfidenceObjects);
-
-        // Estimate costs
-        const { items, totalCost } = aggregateDetectionResults(highConfidenceObjects);
-        console.log('💰 Cost estimation results:', { items, totalCost });
-
-        // Store aggregated items in context
-        setAggregatedItems(items, totalCost);
-
-        // Create assistant message with detection results and cost estimation
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: formatSummaryMessage(items, totalCost),
-          role: 'assistant',
-          timestamp: new Date().toISOString(),
-          detectionResults: detectionResponse.detectionResults
-        };
-
-        console.log('🤖 Assistant message created:', assistantMessage);
-        setLocalMessages((prev) => [...prev, assistantMessage]);
-        await addMessage({
-          role: 'assistant',
-          content: assistantMessage.content
-        });
-      } else {
-        // For text-only messages, use the enhanced planning system
-        console.log('🤖 Planning actions...');
-        const actions = await plan(input, imageUrls);
-        console.log('📋 Planned actions:', actions);
-
-        for (const action of actions) {
-          console.log('⚡ Executing action:', action.type);
-          const response = await executeAction(action);
-          console.log('✅ Action response:', response);
-
-          // Create assistant message based on the action response
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            content: response.content || 'I processed your request.',
-            role: 'assistant',
-            timestamp: new Date().toISOString()
-          };
-
-          console.log('🤖 Assistant message created:', assistantMessage);
-          setLocalMessages((prev) => [...prev, assistantMessage]);
-          await addMessage({
-            role: 'assistant',
-            content: assistantMessage.content
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error processing message:', error);
-      // Handle error appropriately
-    }
-  };
+  }, [messages, localMessages]);
 
   const handleImageUpload = async (file: File) => {
     try {
+      // Upload the image
       const imageUrl = await uploadChatImage(file);
+      
+      // Run object detection
+      const detectAction = {
+        type: 'detect_objects',
+        payload: { imageUrls: [imageUrl] },
+        timestamp: Date.now()
+      };
+
+      console.log('Running object detection...');
+      const detectionResponse = await executeAction(detectAction);
+      console.log('Detection response:', detectionResponse);
+
+      // Store detection results in context
+      if (detectionResponse.detectionResults) {
+        setDetectionResults(detectionResponse.detectionResults);
+        setHasProcessedImage(false); // Reset the flag when a new image is uploaded
+      }
+
+      // Add image message to chat
+      const imageMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: 'I uploaded an image for analysis',
+        imageUrls: [imageUrl],
+        detectionResults: detectionResponse.detectionResults,
+        timestamp: new Date().toISOString()
+      };
+
+      setLocalMessages(prev => [...prev, imageMessage]);
+
       return [imageUrl];
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('Error processing image:', error);
       return [];
     }
   };
 
+  // Convert AI SDK messages to our ChatMessage format
+  const convertedMessages = messages.map((msg, index) => {
+    // Only include detection results in the first message after an image upload
+    const includeDetectionResults = detectionResults.length > 0 && 
+      index === 0 && 
+      !hasProcessedImage;
+
+    return {
+      id: msg.id,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      timestamp: new Date().toISOString(),
+      detectionResults: includeDetectionResults ? detectionResults : undefined
+    };
+  });
+
+  // Combine local and AI messages
+  const allMessages = [...localMessages, ...convertedMessages];
+
   return (
     <div className="flex flex-col h-screen">
       <div className="flex-1 overflow-y-auto p-4">
-        <MessageList messages={localMessages} />
+        <MessageList messages={allMessages} />
         <div ref={messagesEndRef} />
       </div>
       <div className="border-t p-4">
         <InputField
           value={input}
           onChange={handleInputChange}
-          onSubmit={handleSubmit}
+          onSubmit={(e) => handleSubmit(e)}
           onImageUpload={handleImageUpload}
-          isLoading={isSupabaseLoading}
+          isLoading={isLoading}
         />
       </div>
     </div>

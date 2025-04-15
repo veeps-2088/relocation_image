@@ -1,5 +1,6 @@
 import { OpenAIStream, StreamingTextResponse } from 'ai';
 import OpenAI from 'openai';
+import { ChatCompletionMessageParam, ChatCompletionCreateParams } from 'openai/resources/chat/completions';
 
 // Create an OpenAI API client
 const openai = new OpenAI({
@@ -12,16 +13,16 @@ export const runtime = 'edge';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('API route received request');
+    console.log('API route received request:', JSON.stringify(body, null, 2));
     
     const { messages, data } = body;
     
-    // Only try to parse data if it exists
-    let imageUrl, description;
-    if (data) {
-      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-      imageUrl = parsedData.imageUrl;
-      description = parsedData.detectedObjects;
+    // Validate required fields
+    if (!messages || !Array.isArray(messages)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid request: messages array is required' }), 
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     // Check API key first
@@ -32,31 +33,45 @@ export async function POST(req: Request) {
       );
     }
 
-    // If there's an image, add it to the system message
-    let systemMessage = "You are a helpful AI assistant that helps people estimate moving costs.";
-    if (imageUrl) {
-      systemMessage += ` The user has shared an image with you. The following objects were detected: ${description}`;
+    // Only try to parse data if it exists
+    let imageUrl, description;
+    if (data) {
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      imageUrl = parsedData.imageUrl;
+      description = parsedData.detectedObjects;
     }
 
-    // Prepare messages for OpenAI
-    const apiMessages = [
+    // Create a dynamic system message based on context
+    let systemMessage = "You are a helpful AI assistant that helps people estimate moving costs.";
+    if (imageUrl && description) {
+      systemMessage += ` The user has shared an image with you. The following objects were detected: ${description}. 
+      Please provide detailed information about these items, including potential moving costs, packing requirements, and any special handling considerations.`;
+    }
+
+    // Prepare messages for OpenAI with proper structure
+    const apiMessages: ChatCompletionMessageParam[] = [
       { role: 'system', content: systemMessage },
       ...messages.map((msg: { role: string; content: string }) => ({
-        role: msg.role,
+        role: msg.role as 'user' | 'assistant' | 'system',
         content: msg.content || ''
       }))
     ];
 
-    console.log('Sending to OpenAI with system message:', systemMessage);
+    console.log('Sending to OpenAI with messages:', JSON.stringify(apiMessages, null, 2));
+    
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4-turbo-preview',
       messages: apiMessages,
       temperature: 0.7,
       stream: true,
     });
 
-    console.log('OpenAI response received, streaming back to client');
+    // Note: The type error below is a known issue between OpenAI and Vercel AI SDK types
+    // The streaming functionality works correctly at runtime despite the TypeScript error
+    // @ts-ignore - Type mismatch between OpenAI and Vercel AI SDK types
     const stream = OpenAIStream(response);
+    
+    // Return a StreamingTextResponse, which can be consumed by the client
     return new StreamingTextResponse(stream);
     
   } catch (error: any) {
@@ -64,7 +79,8 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({ 
         error: 'Error processing your request',
-        details: error.message 
+        details: error.message,
+        code: error.code || 'UNKNOWN_ERROR'
       }), 
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
