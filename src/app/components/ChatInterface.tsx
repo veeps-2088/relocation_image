@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { useChat } from 'ai/react';
-import MessageList from './MessageList';
-import InputField from './InputField';
-import ErrorDisplay from './ErrorDisplay';
-import LoadingIndicator from './LoadingIndicator';
-import ImageCarousel from './ImageCarousel';
-import { useAgentPlanning } from '@/lib/hooks/useAgentPlanning';
-import { Message, AgentAction } from '@/lib/types/agent';
-import { useDetection } from '@/lib/contexts/DetectionContext';
-import { useEnhancedPlanning } from '@/lib/hooks/useEnhancedPlanning';
-import { useChat as useChatContext } from '@/lib/contexts/ChatContext';
+import { useState, useRef, useEffect } from "react";
+import { useChat } from "ai/react";
+import MessageList from "./MessageList";
+import InputField from "./InputField";
+import ErrorDisplay from "./ErrorDisplay";
+import LoadingIndicator from "./LoadingIndicator";
+import ImageCarousel from "./ImageCarousel";
+import { useAgentPlanning } from "@/lib/hooks/useAgentPlanning";
+import { Message, AgentAction } from "@/lib/types/agent";
+import { useDetection } from "@/lib/contexts/DetectionContext";
+import { useEnhancedPlanning } from "@/lib/hooks/useEnhancedPlanning";
+import { useChat as useChatContext } from "@/lib/contexts/ChatContext";
 
 interface DetectionResult {
   imageUrl: string;
@@ -32,7 +32,7 @@ interface DetectionResult {
 
 type ChatMessage = {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   imageUrls?: string[];
   detectionResults?: DetectionResult[];
@@ -48,6 +48,7 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   bus: 100000,
   chair: 150,
   couch: 1000,
+  sofa: 1000,
   potted_plant: 100,
   table: 500,
   bed: 800,
@@ -57,7 +58,7 @@ const OBJECT_PRICE_MAPPING: { [key: string]: number } = {
   tv: 700,
   book: 15,
   piano: 1000,
-  book_shelf: 200
+  book_shelf: 200,
 };
 
 // Add a new type for aggregated items
@@ -69,18 +70,20 @@ interface AggregatedItem {
 }
 
 // Add a helper function to aggregate and format the results
-const aggregateDetectionResults = (highConfidenceObjects: string[]): {
+const aggregateDetectionResults = (
+  highConfidenceObjects: string[],
+): {
   items: AggregatedItem[];
   totalCost: number;
 } => {
   const itemCounts = new Map<string, { count: number; price: number }>();
 
   // Process each detected object
-  highConfidenceObjects.forEach(obj => {
+  highConfidenceObjects.forEach((obj) => {
     // Extract the base label (remove confidence and price info)
     const match = obj.match(/^([^(]+)/);
     if (!match) return;
-    
+
     const label = match[1].trim().toLowerCase();
     const price = OBJECT_PRICE_MAPPING[label] || 0;
 
@@ -90,9 +93,9 @@ const aggregateDetectionResults = (highConfidenceObjects: string[]): {
     // Update counts
     const existing = itemCounts.get(label);
     if (existing) {
-      itemCounts.set(label, { 
+      itemCounts.set(label, {
         count: existing.count + 1,
-        price
+        price,
       });
     } else {
       itemCounts.set(label, { count: 1, price });
@@ -105,7 +108,7 @@ const aggregateDetectionResults = (highConfidenceObjects: string[]): {
       name,
       count,
       priceEach: price,
-      totalPrice: count * price
+      totalPrice: count * price,
     }))
     .sort((a, b) => b.totalPrice - a.totalPrice);
 
@@ -116,16 +119,20 @@ const aggregateDetectionResults = (highConfidenceObjects: string[]): {
 };
 
 // Update the formatSummaryMessage function
-const formatSummaryMessage = (items: AggregatedItem[], totalCost: number): string => {
+const formatSummaryMessage = (
+  items: AggregatedItem[],
+  totalCost: number,
+): string => {
   const itemLines = items.map((item, index) => {
-    const itemText = `${index + 1}. ${item.name.charAt(0).toUpperCase() + item.name.slice(1)} x ${item.count} ` +
+    const itemText =
+      `${index + 1}. ${item.name.charAt(0).toUpperCase() + item.name.slice(1)} x ${item.count} ` +
       `($${item.priceEach.toLocaleString()} each) = $${item.totalPrice.toLocaleString()}`;
     return itemText;
   });
 
   return `Sure! Based on the updated list, here is the estimated costs of the objects detected:
 
-${itemLines.join('\n')}
+${itemLines.join("\n")}
 
 Total estimated moving cost for the identified items: $${totalCost.toLocaleString()}
 
@@ -148,12 +155,15 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const { uploadChatImage } = useChatContext();
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => {
     if (initialMessages.length === 0) {
-      return [{
-        id: 'welcome',
-        content: "Hi there, I'm your relocation buddy! 👋 To help estimate the value of your items, you can upload one or more images of your household items. I'll analyze them and provide you with a cost estimate.",
-        role: 'assistant',
-        timestamp: new Date().toISOString()
-      }];
+      return [
+        {
+          id: "welcome",
+          content:
+            "Hi there, I'm your relocation buddy! 👋 To help estimate the value of your items, you can upload one or more images of your living room, bedroom, kitchen, etc. I'll analyze them and provide you with a cost estimate.",
+          role: "assistant",
+          timestamp: new Date().toISOString(),
+        },
+      ];
     }
     return initialMessages;
   });
@@ -167,7 +177,7 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   const formatDetectionResponse = (objects: string[]): string => {
     // Count occurrences of each object
     const objectCounts: { [key: string]: number } = {};
-    objects.forEach(obj => {
+    objects.forEach((obj) => {
       const normalizedObj = obj.toLowerCase().trim();
       objectCounts[normalizedObj] = (objectCounts[normalizedObj] || 0) + 1;
     });
@@ -176,12 +186,12 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
     const lines = Object.entries(objectCounts).map(([obj, count]) => {
       const objName = obj.charAt(0).toUpperCase() + obj.slice(1);
       const price = OBJECT_PRICE_MAPPING[obj];
-      
+
       if (price > 0) {
         const total = price * count;
-        return `${objName}${count > 1 ? ` x ${count}` : ''} = $${total.toLocaleString()}`;
+        return `${objName}${count > 1 ? ` x ${count}` : ""} = $${total.toLocaleString()}`;
       } else {
-        return `${objName}${count > 1 ? ` x ${count}` : ''}`;
+        return `${objName}${count > 1 ? ` x ${count}` : ""}`;
       }
     });
 
@@ -189,30 +199,78 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       return "No objects were detected in the image.";
     }
 
-    return `Here are the objects detected:\n${lines.map((line, index) => `${index + 1}. ${line}`).join('\n')}`;
+    return `Here are the objects detected:\n${lines.map((line, index) => `${index + 1}. ${line}`).join("\n")}`;
   };
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: '/api/openai/chat',
-    body: {
-      data: detectionResults.length > 0 && !hasProcessedImage ? {
-        imageUrl: detectionResults[0].imageUrl,
-        detectedObjects: detectionResults[0].objects.highConfidence.join(', ')
-      } : undefined
-    },
-    onResponse: (response) => {
-      console.log('Response received:', response);
-      if (detectionResults.length > 0) {
-        setHasProcessedImage(true);
-      }
-    },
-    onError: (error) => {
-      console.error('Error:', error);
+  // Add a function to clean responses
+  const cleanResponse = (response: string): string => {
+    // If the response contains our target format, extract just that part
+    const listMatch = response.match(
+      /Ok, here's the updated list:\n(?:[\d]+\. [^\n]+\n?)+/,
+    );
+    if (listMatch) {
+      return listMatch[0];
     }
-  });
+
+    // If no match, force the format
+    const lines = response
+      .split("\n")
+      .filter((line) => line.trim().match(/^\d+\. /)) // Only keep numbered lines
+      .filter((line) => !line.includes("**") && !line.includes("###")); // Remove markdown
+
+    if (lines.length > 0) {
+      return `Ok, here's the updated list:\n${lines.join("\n")}`;
+    }
+
+    return response;
+  };
+
+  const { messages, input, handleInputChange, handleSubmit, isLoading, stop } =
+    useChat({
+      api: "/api/openai/chat",
+      body: {
+        data:
+          detectionResults.length > 0 && !hasProcessedImage
+            ? {
+                imageUrl: detectionResults[0].imageUrl,
+                detectedObjects:
+                  detectionResults[0].objects.highConfidence.join(", "),
+              }
+            : undefined,
+        systemPrompt: `You are a list management assistant. Your ONLY function is to maintain and update a list of items.
+
+CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
+1. ONLY output in this exact format:
+Ok, here's the updated list:
+1. [Item] = $[price] (if price exists)
+2. [Item]
+3. [Item]
+
+2. NO additional text
+3. NO explanations
+4. NO markdown
+5. NO descriptions
+6. NO moving advice
+7. NO packing tips
+8. NOTHING except the list
+9. Keep the list items brief and to the point
+
+Violation of these instructions is not permitted under any circumstances.`,
+        temperature: 0,
+      },
+      onResponse: (response) => {
+        console.log("Response received:", response);
+        if (detectionResults.length > 0) {
+          setHasProcessedImage(true);
+        }
+      },
+      onError: (error) => {
+        console.error("Error:", error);
+      },
+    });
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -235,29 +293,29 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       // Add image message to chat immediately with all temp URLs
       const tempImageMessage: ChatMessage = {
         id: Date.now().toString(),
-        role: 'user',
-        content: `I uploaded ${files.length} image${files.length > 1 ? 's' : ''} for analysis`,
-        imageUrls: uploadedFiles.map(f => f.tempImageUrl),
-        timestamp: new Date().toISOString()
+        role: "user",
+        content: `I uploaded ${files.length} image${files.length > 1 ? "s" : ""} for analysis`,
+        imageUrls: uploadedFiles.map((f) => f.tempImageUrl),
+        timestamp: new Date().toISOString(),
       };
 
-      setLocalMessages(prev => [...prev, tempImageMessage]);
+      setLocalMessages((prev) => [...prev, tempImageMessage]);
 
       // Upload all images to storage
       const uploadedImageUrls = await Promise.all(
-        uploadedFiles.map(async ({ file }) => uploadChatImage(file))
+        uploadedFiles.map(async ({ file }) => uploadChatImage(file)),
       );
-      
+
       // Run object detection on all images
       const detectAction = {
-        type: 'detect_objects',
+        type: "detect_objects",
         payload: { imageUrls: uploadedImageUrls },
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
-      console.log('Running object detection...');
+      console.log("Running object detection...");
       const detectionResponse = await executeAction(detectAction);
-      console.log('Detection response:', detectionResponse);
+      console.log("Detection response:", detectionResponse);
 
       // Store detection results in context
       if (detectionResponse.detectionResults) {
@@ -269,12 +327,14 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       const updatedImageMessage: ChatMessage = {
         ...tempImageMessage,
         imageUrls: uploadedImageUrls,
-        detectionResults: detectionResponse.detectionResults
+        detectionResults: detectionResponse.detectionResults,
       };
 
-      setLocalMessages(prev => {
+      setLocalMessages((prev) => {
         const updatedMessages = [...prev];
-        const messageIndex = updatedMessages.findIndex(msg => msg.id === tempImageMessage.id);
+        const messageIndex = updatedMessages.findIndex(
+          (msg) => msg.id === tempImageMessage.id,
+        );
         if (messageIndex !== -1) {
           updatedMessages[messageIndex] = updatedImageMessage;
         }
@@ -284,22 +344,26 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
       // Add formatted detection response
       if (detectionResponse.detectionResults?.[0]?.objects?.highConfidence) {
         const formattedResponse = formatDetectionResponse(
-          detectionResponse.detectionResults.flatMap(result => result.objects.highConfidence)
+          detectionResponse.detectionResults.flatMap(
+            (result) => result.objects.highConfidence,
+          ),
         );
         const responseMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
-          role: 'assistant',
+          role: "assistant",
           content: formattedResponse,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
-        setLocalMessages(prev => [...prev, responseMessage]);
+        setLocalMessages((prev) => [...prev, responseMessage]);
       }
 
       return uploadedImageUrls;
     } catch (error) {
-      console.error('Error processing images:', error);
+      console.error("Error processing images:", error);
       // Remove the temporary message if there was an error
-      setLocalMessages(prev => prev.filter(msg => msg.id !== Date.now().toString()));
+      setLocalMessages((prev) =>
+        prev.filter((msg) => msg.id !== Date.now().toString()),
+      );
       return [];
     } finally {
       setIsProcessingImage(false);
@@ -309,16 +373,16 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
   // Convert AI SDK messages to our ChatMessage format
   const convertedMessages = messages.map((msg, index) => {
     // Only include detection results in the first message after an image upload
-    const includeDetectionResults = detectionResults.length > 0 && 
-      index === 0 && 
-      !hasProcessedImage;
+    const includeDetectionResults =
+      detectionResults.length > 0 && index === 0 && !hasProcessedImage;
 
     return {
       id: msg.id,
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
+      role: msg.role as "user" | "assistant",
+      content:
+        msg.role === "assistant" ? cleanResponse(msg.content) : msg.content,
       timestamp: new Date().toISOString(),
-      detectionResults: includeDetectionResults ? detectionResults : undefined
+      detectionResults: includeDetectionResults ? detectionResults : undefined,
     };
   });
 
@@ -338,8 +402,9 @@ export function ChatInterface({ initialMessages = [] }: ChatInterfaceProps) {
           onSubmit={(e) => handleSubmit(e)}
           onImageUpload={handleImageUpload}
           isLoading={isLoading || isProcessingImage}
+          onStop={stop}
         />
       </div>
     </div>
   );
-} 
+}

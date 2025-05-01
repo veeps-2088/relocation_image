@@ -42,10 +42,10 @@ export async function POST(req: Request) {
     }
 
     // Create a dynamic system message based on context
-    let systemMessage = "You are a helpful AI assistant that helps people estimate moving costs.";
+    let systemMessage = "You are a helpful AI assistant that helps people estimate moving costs. Keep all responses extremely concise - 2-3 sentences maximum.";
     if (imageUrl && description) {
       systemMessage += ` The user has shared an image with you. The following objects were detected: ${description}. 
-      Please provide detailed information about these items, including potential moving costs, packing requirements, and any special handling considerations.`;
+      Please provide brief information about these items, focusing on key moving costs and essential handling considerations.`;
     }
 
     // Prepare messages for OpenAI with proper structure

@@ -8,6 +8,7 @@ interface InputFieldProps {
   onSubmit: (e: React.FormEvent, imageUrls?: string[]) => void;
   onImageUpload: (files: File[]) => Promise<string[]>;
   isLoading: boolean;
+  onStop?: () => void;
 }
 
 export default function InputField({
@@ -16,6 +17,7 @@ export default function InputField({
   onSubmit,
   onImageUpload,
   isLoading,
+  onStop,
 }: InputFieldProps) {
   const [isImagesSent, setIsImagesSent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,13 +78,32 @@ export default function InputField({
             </svg>
           </button>
         </div>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-          disabled={!value.trim() || isLoading}
-        >
-          {isLoading ? 'Sending...' : 'Send'}
-        </button>
+        {isLoading ? (
+          <div className="flex space-x-2">
+            <button
+              type="button"
+              onClick={onStop}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+            >
+              Stop
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
+              disabled
+            >
+              Sending...
+            </button>
+          </div>
+        ) : (
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            disabled={!value.trim()}
+          >
+            Send
+          </button>
+        )}
       </form>
     </div>
   );
