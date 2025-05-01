@@ -58,16 +58,7 @@ export default function ImageCarousel({ detectionResults, onObjectConfirmation }
 
   // Early return if no objects found
   if (allObjects.length === 0) {
-    return (
-      <div className="w-full max-w-sm mx-auto mt-2 p-4 text-center text-gray-600 bg-gray-100 rounded-lg">
-        <p>No objects detected with confidence level between 50-74%</p>
-        <p className="text-sm mt-2">
-          {detectionResults.length > 0 
-            ? 'All detected objects are outside this confidence range'
-            : 'No objects detected in the images'}
-        </p>
-      </div>
-    );
+    return null;
   }
 
   // Handle object confirmation

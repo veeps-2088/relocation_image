@@ -119,42 +119,65 @@ function AgentContextProviderInner({ children }: AgentContextProviderProps) {
       switch (action.type) {
         case 'detect_objects': {
           const { imageUrls } = action.payload;
+          console.log('Processing image URLs:', imageUrls);
+          
           const detectionResults = await Promise.all(
             imageUrls.map(async (url: string) => {
-              const detectionResponse = await fetch('/api/object-detection', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageUrl: url }),
-              });
-              
-              if (!detectionResponse.ok) {
-                throw new Error(`Object detection failed: ${detectionResponse.status} ${detectionResponse.statusText}`);
+              console.log('Sending detection request for URL:', url);
+              try {
+                const detectionResponse = await fetch('/api/object-detection', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ imageUrl: url }),
+                });
+                
+                if (!detectionResponse.ok) {
+                  const errorText = await detectionResponse.text();
+                  console.error('Detection API error:', {
+                    status: detectionResponse.status,
+                    statusText: detectionResponse.statusText,
+                    body: errorText
+                  });
+                  throw new Error(`Object detection failed: ${detectionResponse.status} ${detectionResponse.statusText}\n${errorText}`);
+                }
+                
+                const result = await detectionResponse.json();
+                console.log('Detection result:', result);
+                
+                if (!result.success) {
+                  throw new Error(result.error || 'Object detection failed without error details');
+                }
+                
+                return {
+                  imageUrl: url,
+                  objects: {
+                    highConfidence: result.results
+                      .filter((r: any) => parseFloat(r.score) >= 75)
+                      .map((r: any) => r.label),
+                    lowerConfidence: result.results
+                      .filter((r: any) => parseFloat(r.score) < 75)
+                      .map((r: any) => ({
+                        label: r.label,
+                        score: r.score,
+                        box: r.box
+                      }))
+                  }
+                };
+              } catch (error) {
+                console.error('Error processing image:', error);
+                throw error;
               }
-              
-              const result = await detectionResponse.json();
-              return result;
             })
           );
+
+          // Store the detection results
+          setDetectionResults(detectionResults);
 
           response = {
             action,
             reasoning: 'Objects detected in images',
             confidence: 0.9,
-            detectionResults: detectionResults.map(result => ({
-              imageUrl: imageUrls[0],
-              objects: {
-                highConfidence: result.results
-                  .filter((r: any) => parseFloat(r.score) >= 75)
-                  .map((r: any) => r.label),
-                lowerConfidence: result.results
-                  .filter((r: any) => parseFloat(r.score) < 75)
-                  .map((r: any) => ({
-                    label: r.label,
-                    score: r.score,
-                    box: r.box
-                  }))
-              }
-            }))
+            detectionResults
           };
           break;
         }
@@ -285,7 +308,7 @@ function AgentContextProviderInner({ children }: AgentContextProviderProps) {
       setAgentState(prev => ({ ...prev, status: 'idle' }));
       throw error;
     }
-  }, [setAggregatedItems, append, messages]);
+  }, [setDetectionResults, setAggregatedItems, append, messages]);
 
   return (
     <AgentContext.Provider value={{ agentState, executeAction, updateContext }}>

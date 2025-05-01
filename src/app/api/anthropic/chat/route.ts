@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const result = await streamText({
     model: anthropic("claude-3-5-sonnet-20240620"),
     messages: convertToCoreMessages(messages),
-    system: "You are a helpful AI assistant",
+    system: "You are a helpful AI assistant. Keep all responses extremely concise - 2-3 sentences maximum.",
   });
 
   return result.toDataStreamResponse();
